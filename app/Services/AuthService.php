@@ -31,6 +31,7 @@ class AuthService {
         $cleanName = trim($name);
         $clientIp = $this->resolveClientIp();
         $deviceFingerprint = $this->generateDeviceFingerprint();
+        $legacyFingerprint = $this->generateLegacyDeviceFingerprint();
 
         if (!filter_var($cleanEmail, FILTER_VALIDATE_EMAIL)) {
             throw new Exception("Please provide a valid corporate or personal email address.");
@@ -44,6 +45,20 @@ class AuthService {
         $stmt->execute([':email' => $cleanEmail]);
         if ($stmt->fetch()) {
             throw new Exception("An account is already registered with this email address.");
+        }
+
+        $fingerprintStmt = $this->db->prepare("
+            SELECT id FROM users
+            WHERE device_fingerprint = :device_fingerprint
+               OR device_fingerprint = :legacy_fingerprint
+            LIMIT 1
+        ");
+        $fingerprintStmt->execute([
+            ':device_fingerprint' => $deviceFingerprint,
+            ':legacy_fingerprint' => $legacyFingerprint,
+        ]);
+        if ($fingerprintStmt->fetch()) {
+            throw new Exception("This device has already been used to register an account. Only one account is allowed per device.");
         }
 
         // Generate user referral code
@@ -445,12 +460,35 @@ class AuthService {
     }
 
     private function generateDeviceFingerprint(): string {
+        $deviceId = trim((string)($_COOKIE['CN_DEVICE_ID'] ?? ''));
+        if ($deviceId === '' || !preg_match('/^[a-f0-9]{64}$/', $deviceId)) {
+            $deviceId = bin2hex(random_bytes(32));
+            $isSecureRequest = (
+                (($_SERVER['HTTPS'] ?? '') === 'on')
+                || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https')
+            );
+            setcookie('CN_DEVICE_ID', $deviceId, [
+                'expires' => time() + (86400 * 365 * 2),
+                'path' => '/',
+                'secure' => $isSecureRequest,
+                'httponly' => true,
+                'samesite' => 'Lax',
+            ]);
+        }
+
+        $ua = $_SERVER['HTTP_USER_AGENT'] ?? 'unknown';
+        $lang = $_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? 'unknown';
+        $accept = $_SERVER['HTTP_ACCEPT'] ?? 'unknown';
+        $seed = $deviceId . '|' . $ua . '|' . $lang . '|' . $accept;
+        return hash('sha256', $seed);
+    }
+
+    private function generateLegacyDeviceFingerprint(): string {
         $ua = $_SERVER['HTTP_USER_AGENT'] ?? 'unknown';
         $lang = $_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? 'unknown';
         $accept = $_SERVER['HTTP_ACCEPT'] ?? 'unknown';
         $ip = $this->resolveClientIp();
-        $seed = $ip . '|' . $ua . '|' . $lang . '|' . $accept;
-        return hash('sha256', $seed);
+        return hash('sha256', $ip . '|' . $ua . '|' . $lang . '|' . $accept);
     }
 
     private function sendEmail(string $toEmail, string $toName, string $subject, string $body, ?string $fallbackLink = null, array $emailTemplate = [], int $maxAttempts = 3): void {
