@@ -147,10 +147,6 @@ class AuthService {
             throw new Exception("Invalid email or password.");
         }
 
-        if ((int)($user['email_verified'] ?? 0) !== 1) {
-            throw new Exception("Please verify your email before signing in. Use the verification link in your inbox or resend it from the registration page.");
-        }
-
         if (!Security::verifyPassword($password, (string)$user['password_hash'])) {
             throw new Exception("Invalid email or password. If you forgot it, use Forgot password.");
         }
