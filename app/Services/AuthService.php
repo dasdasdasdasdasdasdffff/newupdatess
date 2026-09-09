@@ -46,13 +46,6 @@ class AuthService {
             throw new Exception("An account is already registered with this email address.");
         }
 
-        $sameDevice = $this->db->prepare("SELECT id, email, status FROM users WHERE device_fingerprint = :device_fingerprint AND status IN ('active', 'pending') LIMIT 1");
-        $sameDevice->execute([':device_fingerprint' => $deviceFingerprint]);
-        $deviceUser = $sameDevice->fetch();
-        if ($deviceUser) {
-            throw new Exception("This device is already associated with an existing account. One account per device is allowed.");
-        }
-
         // Generate user referral code
         $userRefCode = ReferralService::generateUniqueCode();
         $verificationToken = $this->generateSecureToken();
