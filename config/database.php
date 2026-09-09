@@ -64,7 +64,13 @@ class Database {
                 self::ensureSqliteColumns(self::$instance);
             }
         } catch (PDOException $e) {
-            // If MySQL is not locally reachable (e.g. during standalone container builds), fallback gracefully to SQLite
+            // Never switch a production deployment to a new empty local database.
+            if ((getenv('APP_ENV') ?: 'production') === 'production' && $connectionType === 'mysql') {
+                error_log("Production database connection failed: " . $e->getMessage());
+                throw new Exception("Production database unavailable. Check the Railway MySQL connection.");
+            }
+
+            // SQLite fallback is only for explicit local development.
             try {
                 $sqlitePath = self::getSqlitePath();
                 $sqliteDir = dirname($sqlitePath);
