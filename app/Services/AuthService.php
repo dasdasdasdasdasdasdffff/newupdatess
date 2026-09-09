@@ -37,6 +37,7 @@ class AuthService {
             throw new Exception("This IP address is temporarily blocked. Please try again later.");
         }
         if ($this->hasRegisteredIp($clientIp)) {
+            $this->blockRegistrationIp($clientIp);
             throw new Exception("This IP address has already been used for registration. Only one account is allowed per IP address.");
         }
 
@@ -65,6 +66,8 @@ class AuthService {
             if (!empty($existingDevice['blocked_until']) && strtotime((string)$existingDevice['blocked_until']) > time()) {
                 throw new Exception("This device is blocked from registration. Please contact support.");
             }
+            $this->blockRegistrationDevice((int)$existingDevice['id']);
+            $this->blockRegistrationIp($clientIp);
             throw new Exception("This device has already been registered. Only one account is allowed per device.");
         }
 
@@ -80,6 +83,7 @@ class AuthService {
             ':legacy_fingerprint' => $legacyFingerprint,
         ]);
         if ($fingerprintStmt->fetch()) {
+            $this->blockRegistrationIp($clientIp);
             throw new Exception("This device has already been registered. Only one account is allowed per device.");
         }
         $this->enforceRegistrationRateLimit($clientIp, $deviceId);
@@ -691,6 +695,40 @@ class AuthService {
         ");
         $stmt->execute([':ip' => $ip]);
         return (bool)$stmt->fetchColumn();
+    }
+
+    private function blockRegistrationIp(string $ip): void {
+        $until = date('Y-m-d H:i:s', time() + (30 * 86400));
+        $stmt = $this->db->prepare("
+            INSERT INTO security_ip_blocks (ip_address, blocked_until, reason, created_by, created_at)
+            VALUES (:ip, :until, :reason, NULL, CURRENT_TIMESTAMP)
+            ON DUPLICATE KEY UPDATE blocked_until = VALUES(blocked_until), reason = VALUES(reason)
+        ");
+        if ($this->db->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite') {
+            $stmt = $this->db->prepare("
+                INSERT INTO security_ip_blocks (ip_address, blocked_until, reason, created_by, created_at)
+                VALUES (:ip, :until, :reason, NULL, CURRENT_TIMESTAMP)
+                ON CONFLICT(ip_address) DO UPDATE SET blocked_until = excluded.blocked_until, reason = excluded.reason
+            ");
+        }
+        $stmt->execute([
+            ':ip' => $ip,
+            ':until' => $until,
+            ':reason' => 'Automatic 30-day registration abuse block',
+        ]);
+    }
+
+    private function blockRegistrationDevice(int $deviceId): void {
+        $until = date('Y-m-d H:i:s', time() + (30 * 86400));
+        $this->db->prepare("
+            UPDATE user_devices
+            SET blocked_until = :until, blocked_reason = :reason
+            WHERE id = :id
+        ")->execute([
+            ':until' => $until,
+            ':reason' => 'Automatic 30-day registration abuse block',
+            ':id' => $deviceId,
+        ]);
     }
 
     private function hasRegisteredIp(string $ip): bool {
