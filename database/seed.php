@@ -275,36 +275,9 @@ function runMigrationAndSeed(): void {
         echo "Created super admin: admin@capitalnest.np / Admin@CapitalNest2026!\n";
     }
 
-    // --- SEED DEMO INVESTOR ---
-    $userCheck = $db->query("SELECT COUNT(*) FROM users WHERE email = 'investor@capitalnest.np'")->fetchColumn();
-    if ((int)$userCheck === 0) {
-        $pwHash = password_hash('Investor@2026!', PASSWORD_BCRYPT);
-        $stmt = $db->prepare("INSERT INTO users (referral_code, name, email, phone, password_hash, status, email_verified) VALUES (?, ?, ?, ?, ?, 'active', 1)");
-        $stmt->execute(['CN-NEPAL88', 'Aarav Sharma', 'investor@capitalnest.np', '+977-9841234567', $pwHash]);
-        $userId = (int)$db->lastInsertId();
-
-        // Wallet
-        $stmtW = $db->prepare("INSERT INTO wallets (user_id, available_balance, invested_balance, total_earnings) VALUES (?, 45000.00, 25000.00, 3950.00)");
-        $stmtW->execute([$userId]);
-        $walletId = (int)$db->lastInsertId();
-
-        // Profile
-        $stmtP = $db->prepare("INSERT INTO user_profiles (user_id, address, city, province) VALUES (?, 'Lazimpat Ward 2', 'Kathmandu', 'Bagmati')");
-        $stmtP->execute([$userId]);
-
-        // KYC
-        $stmtK = $db->prepare("INSERT INTO kyc_requests (user_id, document_type, id_number, full_name, father_name, date_of_birth, front_document_path, selfie_path, status, verified_by, verified_at) VALUES (?, 'citizenship', '27-01-78-01928', 'Aarav Sharma', 'Kishore Sharma', '1995-04-12', 'kyc/sample_citizenship.jpg', 'kyc/sample_selfie.jpg', 'verified', 1, datetime('now'))");
-        $stmtK->execute([$userId]);
-
-        // Transaction history
-        $txStmt = $db->prepare("INSERT INTO wallet_transactions (transaction_ref, user_id, wallet_id, type, amount, previous_balance, new_balance, reference) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-        $txStmt->execute(['TXN-' . strtoupper(substr(md5('tx1'), 0, 10)), $userId, $walletId, 'deposit', 50000.00, 0.00, 50000.00, 'Initial eSewa Top-Up']);
-        $txStmt->execute(['TXN-' . strtoupper(substr(md5('tx2'), 0, 10)), $userId, $walletId, 'investment', -25000.00, 50000.00, 25000.00, 'Invested in Kathmandu Equity Growth']);
-        $txStmt->execute(['TXN-' . strtoupper(substr(md5('tx3'), 0, 10)), $userId, $walletId, 'profit', 3950.00, 25000.00, 28950.00, 'Monthly return payout']);
-        $txStmt->execute(['TXN-' . strtoupper(substr(md5('tx4'), 0, 10)), $userId, $walletId, 'deposit', 16050.00, 28950.00, 45000.00, 'Bank Deposit Ref #NBL-9921']);
-
-        echo "Created demo investor: investor@capitalnest.np / Investor@2026!\n";
-    }
+    // --- LIVE STATE: no demo investor/wallet data seeded ---
+    // Real users will be created through the registration flow and stored normally.
+    // Existing demo balances are cleared during startup to keep admin totals at zero.
 
     // --- SEED INVESTMENT PLANS ---
     $plansCheck = (int)$db->query("SELECT COUNT(*) FROM investment_plans")->fetchColumn();

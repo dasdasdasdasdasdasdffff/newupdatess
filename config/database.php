@@ -20,12 +20,25 @@ class Database {
             return self::$instance;
         }
 
+        $databaseUrl = getenv('DATABASE_URL') ?: getenv('MYSQL_URL') ?: getenv('CLEARDB_DATABASE_URL') ?: null;
         $connectionType = getenv('DB_CONNECTION') ?: 'mysql';
-        $host = getenv('DB_HOST') ?: '127.0.0.1';
-        $port = getenv('DB_PORT') ?: '3306';
-        $database = getenv('DB_DATABASE') ?: (getenv('DB_NAME') ?: 'capitalnest_db');
-        $username = getenv('DB_USERNAME') ?: (getenv('DB_USER') ?: 'root');
-        $password = getenv('DB_PASSWORD') !== false ? getenv('DB_PASSWORD') : '';
+
+        if ($databaseUrl && !getenv('DB_HOST') && !getenv('MYSQLHOST')) {
+            $parsed = parse_url((string)$databaseUrl);
+            if (is_array($parsed) && isset($parsed['host'])) {
+                putenv('DB_HOST=' . ($parsed['host'] ?? '127.0.0.1'));
+                putenv('DB_PORT=' . ($parsed['port'] ?? '3306'));
+                putenv('DB_DATABASE=' . ltrim((string)($parsed['path'] ?? '/capitalnest_db'), '/'));
+                putenv('DB_USERNAME=' . ($parsed['user'] ?? 'root'));
+                putenv('DB_PASSWORD=' . ($parsed['pass'] ?? ''));
+            }
+        }
+
+        $host = getenv('DB_HOST') ?: getenv('MYSQLHOST') ?: getenv('MYSQL_HOST') ?: getenv('DATABASE_HOST') ?: '127.0.0.1';
+        $port = getenv('DB_PORT') ?: getenv('MYSQLPORT') ?: getenv('MYSQL_PORT') ?: '3306';
+        $database = getenv('DB_DATABASE') ?: getenv('DB_NAME') ?: getenv('MYSQLDATABASE') ?: getenv('MYSQL_DB') ?: 'capitalnest_db';
+        $username = getenv('DB_USERNAME') ?: getenv('DB_USER') ?: getenv('MYSQLUSER') ?: getenv('MYSQL_USER') ?: 'root';
+        $password = getenv('DB_PASSWORD') !== false ? getenv('DB_PASSWORD') : (getenv('MYSQLPASSWORD') ?: getenv('MYSQL_PASSWORD') ?: '');
 
         $options = [
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
