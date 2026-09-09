@@ -87,6 +87,7 @@ $activeRoute = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
                 $adminNav = [
                     ['/admin/dashboard', 'activity', 'Ops Center'],
                     ['/admin/users', 'users', 'All Users'],
+                    ['/admin/devices', 'shield-check', 'Device & Security'],
                     ['/admin/deposits', 'arrow-down-circle', 'Deposits Queue'],
                     ['/admin/withdrawals', 'arrow-up-circle', 'Withdrawals Queue'],
                     ['/admin/kyc', 'file-check', 'KYC Compliance'],

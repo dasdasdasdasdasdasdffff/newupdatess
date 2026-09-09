@@ -33,6 +33,9 @@ class AuthService {
         $clientIp = $this->resolveClientIp();
         $deviceFingerprint = $this->generateDeviceFingerprint();
         $legacyFingerprint = $this->generateLegacyDeviceFingerprint();
+        if ($this->isIpBlocked($clientIp)) {
+            throw new Exception("This IP address is temporarily blocked. Please try again later.");
+        }
 
         if (!filter_var($cleanEmail, FILTER_VALIDATE_EMAIL)) {
             throw new Exception("Please provide a valid corporate or personal email address.");
@@ -49,6 +52,20 @@ class AuthService {
             throw new Exception("An account is already registered with this email address.");
         }
 
+        $deviceId = $this->generateDeviceId();
+        $device = $this->getDeviceMetadata($deviceId, $clientIp);
+
+        $deviceStmt = $this->db->prepare("SELECT id, blocked_until FROM user_devices WHERE device_id = :device_id LIMIT 1");
+        $deviceStmt->execute([':device_id' => $deviceId]);
+        $existingDevice = $deviceStmt->fetch();
+        if ($existingDevice) {
+            if (!empty($existingDevice['blocked_until']) && strtotime((string)$existingDevice['blocked_until']) > time()) {
+                throw new Exception("This device is blocked from registration. Please contact support.");
+            }
+            throw new Exception("This device has already been registered. Only one account is allowed per device.");
+        }
+
+        // Keep rejecting legacy registrations created before user_devices existed.
         $fingerprintStmt = $this->db->prepare("
             SELECT id FROM users
             WHERE device_fingerprint = :device_fingerprint
@@ -60,8 +77,9 @@ class AuthService {
             ':legacy_fingerprint' => $legacyFingerprint,
         ]);
         if ($fingerprintStmt->fetch()) {
-            throw new Exception("This device has already been used to register an account. Only one account is allowed per device.");
+            throw new Exception("This device has already been registered. Only one account is allowed per device.");
         }
+        $this->enforceRegistrationRateLimit($clientIp, $deviceId);
 
         // Generate user referral code
         $userRefCode = ReferralService::generateUniqueCode();
@@ -92,11 +110,27 @@ class AuthService {
                 ]);
             } catch (PDOException $e) {
                 if ($e->getCode() === '23000') {
-                    throw new Exception("This device has already been used to register an account. Only one account is allowed per device.", 0, $e);
+                    throw new Exception("This device has already been registered. Only one account is allowed per device.", 0, $e);
                 }
                 throw $e;
             }
             $userId = (int)$this->db->lastInsertId();
+
+            $deviceInsert = $this->db->prepare("
+                INSERT INTO user_devices
+                    (user_id, device_id, ip_address, user_agent, browser, operating_system, device_type, created_at, last_seen_at)
+                VALUES
+                    (:user_id, :device_id, :ip_address, :user_agent, :browser, :operating_system, :device_type, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            ");
+            $deviceInsert->execute([
+                ':user_id' => $userId,
+                ':device_id' => $device['device_id'],
+                ':ip_address' => $device['ip_address'],
+                ':user_agent' => $device['user_agent'],
+                ':browser' => $device['browser'],
+                ':operating_system' => $device['operating_system'],
+                ':device_type' => $device['device_type'],
+            ]);
 
             // 2. Initialize Profile
             $pStmt = $this->db->prepare("INSERT INTO user_profiles (user_id, created_at) VALUES (:uid, CURRENT_TIMESTAMP)");
@@ -163,6 +197,9 @@ class AuthService {
         if (!Security::verifyPassword($password, (string)$user['password_hash'])) {
             throw new Exception("Invalid email or password. If you forgot it, use Forgot password.");
         }
+        if ($this->isIpBlocked($this->resolveClientIp())) {
+            throw new Exception("This IP address is temporarily blocked. Please try again later.");
+        }
 
         if ((int)($user['email_verified'] ?? 0) !== 1) {
             throw new Exception("Please verify your email address before signing in. Check your inbox for the verification link.", 1001);
@@ -177,6 +214,40 @@ class AuthService {
         }
 
         $currentDeviceFingerprint = $this->generateDeviceFingerprint();
+        $deviceId = $this->generateDeviceId();
+        $deviceStmt = $this->db->prepare("
+            SELECT * FROM user_devices
+            WHERE user_id = :user_id AND device_id = :device_id
+            LIMIT 1
+        ");
+        $deviceStmt->execute([':user_id' => $user['id'], ':device_id' => $deviceId]);
+        $device = $deviceStmt->fetch();
+        if (!$device && empty($user['device_fingerprint'])) {
+            $deviceInsert = $this->db->prepare("
+                INSERT INTO user_devices
+                    (user_id, device_id, ip_address, user_agent, browser, operating_system, device_type, created_at, last_seen_at)
+                VALUES
+                    (:user_id, :device_id, :ip_address, :user_agent, :browser, :operating_system, :device_type, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            ");
+            $metadata = $this->getDeviceMetadata($deviceId, $this->resolveClientIp());
+            $deviceInsert->execute([
+                ':user_id' => $user['id'],
+                ':device_id' => $metadata['device_id'],
+                ':ip_address' => $metadata['ip_address'],
+                ':user_agent' => $metadata['user_agent'],
+                ':browser' => $metadata['browser'],
+                ':operating_system' => $metadata['operating_system'],
+                ':device_type' => $metadata['device_type'],
+            ]);
+            $metadata['id'] = (int)$this->db->lastInsertId();
+            $device = $metadata;
+        }
+        if (!$device && !empty($user['device_fingerprint'])) {
+            throw new Exception("This account is locked to the device used during registration. Sign in from that device and browser.");
+        }
+        if (!empty($device['blocked_until']) && strtotime((string)$device['blocked_until']) > time()) {
+            throw new Exception("This device has been blocked. Please contact support.");
+        }
         if (!empty($user['device_fingerprint']) && !hash_equals((string)$user['device_fingerprint'], $currentDeviceFingerprint)) {
             throw new Exception("This account is locked to the device used during registration. Sign in from that device and browser.");
         }
@@ -199,6 +270,24 @@ class AuthService {
             ':device_fingerprint' => $currentDeviceFingerprint,
             ':id' => $user['id']
         ]);
+        if ($device) {
+            $seen = $this->db->prepare("
+                UPDATE user_devices
+                SET ip_address = :ip, user_agent = :user_agent, browser = :browser,
+                    operating_system = :operating_system, device_type = :device_type,
+                    last_seen_at = CURRENT_TIMESTAMP
+                WHERE id = :id
+            ");
+            $metadata = $this->getDeviceMetadata($deviceId, $ip);
+            $seen->execute([
+                ':ip' => $metadata['ip_address'],
+                ':user_agent' => $metadata['user_agent'],
+                ':browser' => $metadata['browser'],
+                ':operating_system' => $metadata['operating_system'],
+                ':device_type' => $metadata['device_type'],
+                ':id' => $device['id'],
+            ]);
+        }
 
         return [
             'success' => true,
@@ -496,6 +585,7 @@ class AuthService {
                 'httponly' => true,
                 'samesite' => 'Lax',
             ]);
+            $_COOKIE['CN_DEVICE_ID'] = $deviceId;
         }
 
         $ua = $_SERVER['HTTP_USER_AGENT'] ?? 'unknown';
@@ -503,6 +593,106 @@ class AuthService {
         $accept = $_SERVER['HTTP_ACCEPT'] ?? 'unknown';
         $seed = $deviceId . '|' . $ua . '|' . $lang . '|' . $accept;
         return hash('sha256', $seed);
+    }
+
+    private function generateDeviceId(): string {
+        $deviceId = trim((string)($_COOKIE['CN_DEVICE_ID'] ?? ''));
+        if ($deviceId === '' || !preg_match('/^[a-f0-9]{64}$/', $deviceId)) {
+            $deviceId = bin2hex(random_bytes(32));
+            $isSecureRequest = (
+                (($_SERVER['HTTPS'] ?? '') === 'on')
+                || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https')
+            );
+            setcookie('CN_DEVICE_ID', $deviceId, [
+                'expires' => time() + (86400 * 365 * 2),
+                'path' => '/',
+                'secure' => $isSecureRequest,
+                'httponly' => true,
+                'samesite' => 'Lax',
+            ]);
+            $_COOKIE['CN_DEVICE_ID'] = $deviceId;
+        }
+
+        $secret = (string)(getenv('APP_KEY') ?: getenv('APP_URL') ?: 'capitalnest-device-key');
+        return hash_hmac('sha256', $deviceId, $secret);
+    }
+
+    private function getDeviceMetadata(string $deviceId, string $ip): array {
+        $userAgent = trim((string)($_SERVER['HTTP_USER_AGENT'] ?? 'unknown'));
+        $browser = 'Other';
+        if (preg_match('/Edg\/[\d.]+/i', $userAgent)) {
+            $browser = 'Edge';
+        } elseif (preg_match('/Chrome\/[\d.]+/i', $userAgent)) {
+            $browser = 'Chrome';
+        } elseif (preg_match('/Firefox\/[\d.]+/i', $userAgent)) {
+            $browser = 'Firefox';
+        } elseif (preg_match('/Safari\/[\d.]+/i', $userAgent)) {
+            $browser = 'Safari';
+        }
+
+        $operatingSystem = 'Other';
+        if (preg_match('/Windows/i', $userAgent)) {
+            $operatingSystem = 'Windows';
+        } elseif (preg_match('/Android/i', $userAgent)) {
+            $operatingSystem = 'Android';
+        } elseif (preg_match('/iPhone|iPad|iPod/i', $userAgent)) {
+            $operatingSystem = 'iOS';
+        } elseif (preg_match('/Mac OS X/i', $userAgent)) {
+            $operatingSystem = 'macOS';
+        } elseif (preg_match('/Linux/i', $userAgent)) {
+            $operatingSystem = 'Linux';
+        }
+
+        $deviceType = 'desktop';
+        if (preg_match('/iPad|Tablet|Android(?!.*Mobile)/i', $userAgent)) {
+            $deviceType = 'tablet';
+        } elseif (preg_match('/Mobile|iPhone|iPod|Android/i', $userAgent)) {
+            $deviceType = 'mobile';
+        }
+
+        return [
+            'device_id' => $deviceId,
+            'ip_address' => $ip,
+            'user_agent' => substr($userAgent, 0, 1000),
+            'browser' => $browser,
+            'operating_system' => $operatingSystem,
+            'device_type' => $deviceType,
+        ];
+    }
+
+    private function enforceRegistrationRateLimit(string $ip, string $deviceId): void {
+        $stmt = $this->db->prepare("
+            SELECT COUNT(*) FROM registration_attempts
+            WHERE attempted_at >= datetime('now', '-10 minutes')
+              AND (ip_address = :ip OR device_id = :device_id)
+        ");
+        if ($this->db->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql') {
+            $stmt = $this->db->prepare("
+                SELECT COUNT(*) FROM registration_attempts
+                WHERE attempted_at >= (CURRENT_TIMESTAMP - INTERVAL 10 MINUTE)
+                  AND (ip_address = :ip OR device_id = :device_id)
+            ");
+        }
+        $stmt->execute([':ip' => $ip, ':device_id' => $deviceId]);
+        if ((int)$stmt->fetchColumn() >= 5) {
+            throw new Exception("Too many registration attempts. Please try again later.");
+        }
+
+        $insert = $this->db->prepare("
+            INSERT INTO registration_attempts (ip_address, device_id, attempted_at)
+            VALUES (:ip, :device_id, CURRENT_TIMESTAMP)
+        ");
+        $insert->execute([':ip' => $ip, ':device_id' => $deviceId]);
+    }
+
+    private function isIpBlocked(string $ip): bool {
+        $stmt = $this->db->prepare("
+            SELECT id FROM security_ip_blocks
+            WHERE ip_address = :ip AND blocked_until > CURRENT_TIMESTAMP
+            LIMIT 1
+        ");
+        $stmt->execute([':ip' => $ip]);
+        return (bool)$stmt->fetchColumn();
     }
 
     private function generateLegacyDeviceFingerprint(): string {

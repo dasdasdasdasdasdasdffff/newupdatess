@@ -81,6 +81,8 @@ return [
 
     'GET /admin/dashboard' => [AdminController::class, 'dashboard'],
     'GET /admin/users' => [AdminController::class, 'users'],
+    'GET /admin/devices' => [AdminController::class, 'devices'],
+    'POST /admin/devices/action' => [AdminController::class, 'deviceAction'],
     'GET /admin/users/detail' => function() {
         $id = (int)($_GET['id'] ?? 0);
         (new AdminController())->userDetail($id);

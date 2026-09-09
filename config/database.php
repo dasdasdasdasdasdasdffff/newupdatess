@@ -62,6 +62,8 @@ class Database {
                     PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC
                 ]);
                 self::ensureSqliteColumns(self::$instance);
+                self::ensureSqliteDeviceFingerprintIndex(self::$instance);
+                self::ensureSqliteSecurityTables(self::$instance);
             }
         } catch (PDOException $e) {
             // Never switch a production deployment to a new empty local database.
@@ -102,6 +104,7 @@ class Database {
                 self::ensureMysqlSessionTable($pdo);
                 self::ensureMysqlColumns($pdo);
                 self::ensureMysqlDeviceFingerprintIndex($pdo);
+                self::ensureMysqlSecurityTables($pdo);
                 self::backfillMysqlReferrals($pdo);
                 return;
             }
@@ -113,6 +116,7 @@ class Database {
             self::ensureMysqlSessionTable($pdo);
             self::ensureMysqlColumns($pdo);
             self::ensureMysqlDeviceFingerprintIndex($pdo);
+            self::ensureMysqlSecurityTables($pdo);
             self::backfillMysqlReferrals($pdo);
             return;
         }
@@ -238,6 +242,7 @@ class Database {
 
         self::ensureSqliteColumns($pdo);
         self::ensureSqliteDeviceFingerprintIndex($pdo);
+        self::ensureSqliteSecurityTables($pdo);
     }
 
     private static function ensureSqliteDeviceFingerprintIndex(PDO $pdo): void {
@@ -255,6 +260,84 @@ class Database {
         }
 
         $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS uk_users_device_fingerprint ON users (device_fingerprint)");
+    }
+
+    private static function ensureMysqlSecurityTables(PDO $pdo): void {
+        $pdo->exec("CREATE TABLE IF NOT EXISTS user_devices (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            user_id BIGINT UNSIGNED NOT NULL,
+            device_id CHAR(64) NOT NULL,
+            ip_address VARCHAR(45) NULL,
+            user_agent VARCHAR(1000) NULL,
+            browser VARCHAR(80) NULL,
+            operating_system VARCHAR(80) NULL,
+            device_type VARCHAR(30) NULL,
+            blocked_until DATETIME NULL,
+            blocked_reason VARCHAR(255) NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            last_seen_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY uk_user_devices_device_id (device_id),
+            INDEX idx_user_devices_user_id (user_id),
+            INDEX idx_user_devices_ip (ip_address)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        $pdo->exec("CREATE TABLE IF NOT EXISTS registration_attempts (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            ip_address VARCHAR(45) NULL,
+            device_id CHAR(64) NULL,
+            attempted_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_registration_attempts_time (attempted_at),
+            INDEX idx_registration_attempts_device (device_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        $pdo->exec("CREATE TABLE IF NOT EXISTS security_ip_blocks (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            ip_address VARCHAR(45) NOT NULL,
+            blocked_until DATETIME NOT NULL,
+            reason VARCHAR(255) NULL,
+            created_by BIGINT UNSIGNED NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY uk_security_ip_blocks_ip (ip_address)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        $pdo->exec("INSERT IGNORE INTO user_devices
+            (user_id, device_id, ip_address, created_at, last_seen_at)
+            SELECT id, device_fingerprint, registration_ip, created_at, COALESCE(last_login_at, created_at)
+            FROM users
+            WHERE device_fingerprint IS NOT NULL AND TRIM(device_fingerprint) <> ''");
+    }
+
+    private static function ensureSqliteSecurityTables(PDO $pdo): void {
+        $pdo->exec("CREATE TABLE IF NOT EXISTS user_devices (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            device_id TEXT NOT NULL UNIQUE,
+            ip_address TEXT NULL,
+            user_agent TEXT NULL,
+            browser TEXT NULL,
+            operating_system TEXT NULL,
+            device_type TEXT NULL,
+            blocked_until TEXT NULL,
+            blocked_reason TEXT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            last_seen_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )");
+        $pdo->exec("CREATE TABLE IF NOT EXISTS registration_attempts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ip_address TEXT NULL,
+            device_id TEXT NULL,
+            attempted_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )");
+        $pdo->exec("CREATE TABLE IF NOT EXISTS security_ip_blocks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ip_address TEXT NOT NULL UNIQUE,
+            blocked_until TEXT NOT NULL,
+            reason TEXT NULL,
+            created_by INTEGER NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )");
+        $pdo->exec("INSERT OR IGNORE INTO user_devices
+            (user_id, device_id, ip_address, created_at, last_seen_at)
+            SELECT id, device_fingerprint, registration_ip, created_at, COALESCE(last_login_at, created_at)
+            FROM users
+            WHERE device_fingerprint IS NOT NULL AND TRIM(device_fingerprint) <> ''");
     }
 
     private static function getSqlitePath(): string {

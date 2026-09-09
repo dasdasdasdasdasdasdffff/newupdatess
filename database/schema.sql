@@ -22,6 +22,9 @@ DROP TABLE IF EXISTS `wallets`;
 DROP TABLE IF EXISTS `investments`;
 DROP TABLE IF EXISTS `investment_plans`;
 DROP TABLE IF EXISTS `sessions`;
+DROP TABLE IF EXISTS `security_ip_blocks`;
+DROP TABLE IF EXISTS `registration_attempts`;
+DROP TABLE IF EXISTS `user_devices`;
 DROP TABLE IF EXISTS `user_profiles`;
 DROP TABLE IF EXISTS `admin_users`;
 DROP TABLE IF EXISTS `settings`;
@@ -63,6 +66,48 @@ CREATE TABLE `users` (
   UNIQUE KEY `uk_users_device_fingerprint` (`device_fingerprint`),
   INDEX `idx_users_status` (`status`),
   INDEX `idx_users_referred_by` (`referred_by`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `user_devices` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `user_id` BIGINT UNSIGNED NOT NULL,
+  `device_id` CHAR(64) NOT NULL,
+  `ip_address` VARCHAR(45) NULL,
+  `user_agent` VARCHAR(1000) NULL,
+  `browser` VARCHAR(80) NULL,
+  `operating_system` VARCHAR(80) NULL,
+  `device_type` VARCHAR(30) NULL,
+  `blocked_until` DATETIME NULL,
+  `blocked_reason` VARCHAR(255) NULL,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `last_seen_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_user_devices_device_id` (`device_id`),
+  INDEX `idx_user_devices_user_id` (`user_id`),
+  INDEX `idx_user_devices_ip` (`ip_address`),
+  CONSTRAINT `fk_user_devices_user_id` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `registration_attempts` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `ip_address` VARCHAR(45) NULL,
+  `device_id` CHAR(64) NULL,
+  `attempted_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  INDEX `idx_registration_attempts_time` (`attempted_at`),
+  INDEX `idx_registration_attempts_device` (`device_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `security_ip_blocks` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `ip_address` VARCHAR(45) NOT NULL,
+  `blocked_until` DATETIME NOT NULL,
+  `reason` VARCHAR(255) NULL,
+  `created_by` BIGINT UNSIGNED NULL,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_security_ip_blocks_ip` (`ip_address`),
+  INDEX `idx_security_ip_blocks_until` (`blocked_until`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 2. USER PROFILES TABLE

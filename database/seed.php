@@ -64,7 +64,36 @@ function runMigrationAndSeed(): void {
                 suspicious_flags TEXT NOT NULL DEFAULT '',
                 blocked_reason TEXT NULL,
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
-                updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+                updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+                UNIQUE (device_fingerprint)
+            )",
+            "CREATE TABLE IF NOT EXISTS user_devices (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                device_id TEXT NOT NULL UNIQUE,
+                ip_address TEXT NULL,
+                user_agent TEXT NULL,
+                browser TEXT NULL,
+                operating_system TEXT NULL,
+                device_type TEXT NULL,
+                blocked_until TEXT NULL,
+                blocked_reason TEXT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                last_seen_at TEXT NOT NULL DEFAULT (datetime('now'))
+            )",
+            "CREATE TABLE IF NOT EXISTS registration_attempts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ip_address TEXT NULL,
+                device_id TEXT NULL,
+                attempted_at TEXT NOT NULL DEFAULT (datetime('now'))
+            )",
+            "CREATE TABLE IF NOT EXISTS security_ip_blocks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ip_address TEXT NOT NULL UNIQUE,
+                blocked_until TEXT NOT NULL,
+                reason TEXT NULL,
+                created_by INTEGER NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
             )",
             "CREATE TABLE IF NOT EXISTS user_profiles (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,

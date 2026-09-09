@@ -130,6 +130,114 @@ class AdminController {
         require dirname(__DIR__) . '/Views/admin/users.php';
     }
 
+    public function devices(): void {
+        AdminMiddleware::handle();
+
+        $search = trim((string)($_GET['search'] ?? ''));
+        $deviceType = trim((string)($_GET['device_type'] ?? ''));
+        $operatingSystem = trim((string)($_GET['operating_system'] ?? ''));
+        $date = trim((string)($_GET['date'] ?? ''));
+        $sql = "
+            SELECT d.*, u.id AS account_id, u.name, u.email, u.last_login_at,
+                (SELECT COUNT(*) FROM user_devices d2 WHERE d2.user_id = u.id) AS device_count
+            FROM user_devices d
+            JOIN users u ON u.id = d.user_id
+            WHERE 1 = 1
+        ";
+        $params = [];
+
+        if ($search !== '') {
+            $sql .= " AND (u.name LIKE :search OR u.email LIKE :search OR d.device_id LIKE :search OR d.ip_address LIKE :search)";
+            $params[':search'] = "%{$search}%";
+        }
+        if ($deviceType !== '') {
+            $sql .= " AND d.device_type = :device_type";
+            $params[':device_type'] = $deviceType;
+        }
+        if ($operatingSystem !== '') {
+            $sql .= " AND d.operating_system = :operating_system";
+            $params[':operating_system'] = $operatingSystem;
+        }
+        if ($date !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+            $sql .= " AND DATE(d.created_at) = :device_date";
+            $params[':device_date'] = $date;
+        }
+        $sql .= " ORDER BY d.last_seen_at DESC";
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute($params);
+        $devices = $stmt->fetchAll();
+        $csrf = Security::generateCsrfToken();
+        require dirname(__DIR__) . '/Views/admin/devices.php';
+    }
+
+    public function deviceAction(): void {
+        $admin = AdminMiddleware::handle();
+        $action = (string)($_POST['action'] ?? '');
+        $deviceId = trim((string)($_POST['device_id'] ?? ''));
+        $ipAddress = trim((string)($_POST['ip_address'] ?? ''));
+        $redirect = '/admin/devices';
+
+        if ($deviceId !== '') {
+            $deviceStmt = $this->db->prepare("SELECT * FROM user_devices WHERE device_id = :device_id LIMIT 1");
+            $deviceStmt->execute([':device_id' => $deviceId]);
+            $device = $deviceStmt->fetch();
+            if (!$device) {
+                header('Location: ' . $redirect . '?error=' . urlencode('Device not found.'));
+                exit;
+            }
+
+            if ($action === 'revoke') {
+                $this->db->prepare("DELETE FROM user_devices WHERE id = :id")->execute([':id' => $device['id']]);
+                $this->logActivity((int)$admin['id'], 'revoke_device', 'user_devices', (string)$device['id'], ['device_id' => $deviceId, 'user_id' => $device['user_id']]);
+                header('Location: ' . $redirect . '?success=' . urlencode('Device unlinked.'));
+                exit;
+            }
+
+            if ($action === 'block_device') {
+                $minutes = max(1, min(43200, (int)($_POST['minutes'] ?? 1440)));
+                $until = date('Y-m-d H:i:s', time() + ($minutes * 60));
+                $this->db->prepare("UPDATE user_devices SET blocked_until = :until, blocked_reason = :reason WHERE id = :id")
+                    ->execute([':until' => $until, ':reason' => 'Blocked by admin', ':id' => $device['id']]);
+                $this->logActivity((int)$admin['id'], 'block_device', 'user_devices', (string)$device['id'], ['device_id' => $deviceId, 'until' => $until]);
+                header('Location: ' . $redirect . '?success=' . urlencode('Device blocked.'));
+                exit;
+            }
+
+            if ($action === 'unblock_device') {
+                $this->db->prepare("UPDATE user_devices SET blocked_until = NULL, blocked_reason = NULL WHERE id = :id")
+                    ->execute([':id' => $device['id']]);
+                $this->logActivity((int)$admin['id'], 'unblock_device', 'user_devices', (string)$device['id'], ['device_id' => $deviceId]);
+                header('Location: ' . $redirect . '?success=' . urlencode('Device unblocked.'));
+                exit;
+            }
+        }
+
+        if ($action === 'block_ip' && filter_var($ipAddress, FILTER_VALIDATE_IP)) {
+            $minutes = max(1, min(43200, (int)($_POST['minutes'] ?? 60)));
+            $until = date('Y-m-d H:i:s', time() + ($minutes * 60));
+            $stmt = $this->db->prepare("
+                INSERT INTO security_ip_blocks (ip_address, blocked_until, reason, created_by, created_at)
+                VALUES (:ip, :until, :reason, :admin, CURRENT_TIMESTAMP)
+                ON DUPLICATE KEY UPDATE blocked_until = VALUES(blocked_until), reason = VALUES(reason), created_by = VALUES(created_by)
+            ");
+            if ($this->db->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite') {
+                $stmt = $this->db->prepare("
+                    INSERT INTO security_ip_blocks (ip_address, blocked_until, reason, created_by, created_at)
+                    VALUES (:ip, :until, :reason, :admin, CURRENT_TIMESTAMP)
+                    ON CONFLICT(ip_address) DO UPDATE SET blocked_until = excluded.blocked_until, reason = excluded.reason, created_by = excluded.created_by
+                ");
+            }
+            $stmt->execute([':ip' => $ipAddress, ':until' => $until, ':reason' => 'Blocked by admin', ':admin' => $admin['id']]);
+            $this->logActivity((int)$admin['id'], 'block_ip', 'security_ip_blocks', $ipAddress, ['until' => $until]);
+            header('Location: ' . $redirect . '?success=' . urlencode('IP address blocked temporarily.'));
+            exit;
+        }
+
+        header('Location: ' . $redirect . '?error=' . urlencode('Invalid device security action.'));
+        exit;
+    }
+
     /**
      * Comprehensive User Detail View (360-degree banking overview)
      */
@@ -164,6 +272,10 @@ class AdminController {
         ");
         $rStmt->execute([':id' => $userId]);
         $referrals = $rStmt->fetchAll();
+
+        $deviceStmt = $this->db->prepare("SELECT * FROM user_devices WHERE user_id = :id ORDER BY last_seen_at DESC");
+        $deviceStmt->execute([':id' => $userId]);
+        $userDevices = $deviceStmt->fetchAll();
 
         // Admin Activity logs regarding this user
         $logStmt = $this->db->prepare("SELECT * FROM admin_activity_logs WHERE target_id = :tid ORDER BY id DESC LIMIT 15");

@@ -92,6 +92,35 @@ require dirname(__DIR__) . '/layouts/admin_header.php';
     </div>
 </div>
 
+<div class="bg-white border border-[#E5E7EB] rounded-2xl shadow-sm p-6 mb-8">
+    <div class="flex items-center justify-between mb-4">
+        <div>
+            <h3 class="text-sm font-bold text-[#111827] uppercase tracking-wide">Device &amp; Security</h3>
+            <p class="text-xs text-[#6B7280] mt-1"><?= count($userDevices) ?> device(s) associated with this account.</p>
+        </div>
+        <a href="/admin/devices?search=<?= urlencode((string)$targetUser['email']) ?>" class="text-xs font-semibold text-[#C59B27] hover:underline">Open security console</a>
+    </div>
+    <div class="overflow-x-auto">
+        <table class="w-full text-left text-xs">
+            <thead class="text-[10px] uppercase tracking-wider text-[#6B7280] border-b border-[#E5E7EB]">
+                <tr><th class="py-2 pr-3">Device ID</th><th class="py-2 pr-3">Type</th><th class="py-2 pr-3">OS / Browser</th><th class="py-2 pr-3">IP</th><th class="py-2">Created / Last seen</th></tr>
+            </thead>
+            <tbody class="divide-y divide-[#F3F4F6]">
+                <?php foreach ($userDevices as $device): ?>
+                    <tr>
+                        <td class="py-3 pr-3 font-mono break-all"><?= htmlspecialchars((string)$device['device_id']) ?></td>
+                        <td class="py-3 pr-3"><?= htmlspecialchars((string)$device['device_type']) ?></td>
+                        <td class="py-3 pr-3"><?= htmlspecialchars((string)$device['operating_system']) ?> / <?= htmlspecialchars((string)$device['browser']) ?></td>
+                        <td class="py-3 pr-3 font-mono"><?= htmlspecialchars((string)$device['ip_address']) ?></td>
+                        <td class="py-3"><?= htmlspecialchars((string)$device['created_at']) ?><br><?= htmlspecialchars((string)$device['last_seen_at']) ?></td>
+                    </tr>
+                <?php endforeach; ?>
+                <?php if (empty($userDevices)): ?><tr><td colspan="5" class="py-4 text-[#6B7280]">No device records found.</td></tr><?php endif; ?>
+            </tbody>
+        </table>
+    </div>
+</div>
+
 <!-- Financial Summary (Wallet State) -->
 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
     <div class="p-5 bg-white border border-[#E5E7EB] rounded-2xl shadow-sm">
