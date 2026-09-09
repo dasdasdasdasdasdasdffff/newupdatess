@@ -416,7 +416,9 @@ INSERT INTO `settings` (`setting_key`, `setting_value`, `description`, `category
 ('company_bank_account_no', '01201017500392', 'Company bank account number', 'payment'),
 ('company_bank_branch', 'Durbarmarg, Kathmandu', 'Company bank branch', 'payment');
 
--- Seed Super Admin User (Password: Admin@CapitalNest2026!)
--- Hash generated with password_hash('Admin@CapitalNest2026!', PASSWORD_BCRYPT)
-INSERT INTO `admin_users` (`name`, `email`, `password_hash`, `role`, `status`) VALUES
-('Executive Operations', 'admin@capitalnest.np', '$2y$12$NqL.0L86Q6T2HnE7hZc14uH3f0jM.gR46mK0E68w1fT/yI4J7qW.S', 'super_admin', 'active');
+-- Super admin credentials are loaded from environment variables at runtime.
+-- Do not hardcode email or password values in the SQL schema.
+-- Example env values:
+-- ADMIN_NAME="CapitalNest Compliance Officer"
+-- ADMIN_EMAIL="admin@capitalnest.np"
+-- ADMIN_PASSWORD="your-secure-password"

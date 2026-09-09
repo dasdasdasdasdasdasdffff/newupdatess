@@ -266,13 +266,16 @@ function runMigrationAndSeed(): void {
         }
     }
 
-    // --- SEED ADMIN USERS ---
-    $adminCheck = $db->query("SELECT COUNT(*) FROM admin_users WHERE email = 'admin@capitalnest.np'")->fetchColumn();
+    // --- SEED ADMIN USERS FROM ENV ---
+    $adminName = getenv('ADMIN_NAME') ?: 'CapitalNest Compliance Officer';
+    $adminEmail = getenv('ADMIN_EMAIL') ?: 'admin@capitalnest.np';
+    $adminPassword = getenv('ADMIN_PASSWORD') ?: 'Admin@CapitalNest2026!';
+    $adminCheck = $db->query("SELECT COUNT(*) FROM admin_users WHERE email = " . $db->quote($adminEmail))->fetchColumn();
     if ((int)$adminCheck === 0) {
-        $pwHash = password_hash('Admin@CapitalNest2026!', PASSWORD_BCRYPT);
+        $pwHash = password_hash($adminPassword, PASSWORD_BCRYPT);
         $stmt = $db->prepare("INSERT INTO admin_users (name, email, password_hash, role, status) VALUES (?, ?, ?, ?, 'active')");
-        $stmt->execute(['CapitalNest Compliance Officer', 'admin@capitalnest.np', $pwHash, 'super_admin']);
-        echo "Created super admin: admin@capitalnest.np / Admin@CapitalNest2026!\n";
+        $stmt->execute([$adminName, $adminEmail, $pwHash, 'super_admin']);
+        echo "Created super admin: {$adminEmail}\n";
     }
 
     // --- LIVE STATE: no demo investor/wallet data seeded ---

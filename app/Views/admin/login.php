@@ -42,7 +42,7 @@
                     <label for="email" class="block text-xs font-semibold text-gray-200">Admin Email</label>
                     <div class="mt-1">
                         <input id="email" name="email" type="email" required
-                            placeholder="admin@capitalnest.np"
+                            placeholder="Enter admin email"
                             class="block w-full px-3.5 py-2.5 bg-[#111827] border border-gray-600 rounded-xl text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[#C59B27] focus:ring-1 focus:ring-[#C59B27]">
                     </div>
                 </div>
