@@ -31,7 +31,6 @@ class AuthService {
         $cleanName = trim($name);
         $clientIp = $this->resolveClientIp();
         $deviceFingerprint = $this->generateDeviceFingerprint();
-        $vpnDetected = $this->isLikelyVpnOrProxy($clientIp);
 
         if (!filter_var($cleanEmail, FILTER_VALIDATE_EMAIL)) {
             throw new Exception("Please provide a valid corporate or personal email address.");
@@ -54,16 +53,6 @@ class AuthService {
             throw new Exception("This device is already associated with an existing account. One account per device is allowed.");
         }
 
-        $sameIp = $this->db->prepare("SELECT id FROM users WHERE registration_ip = :ip AND status IN ('active', 'pending') LIMIT 1");
-        $sameIp->execute([':ip' => $clientIp]);
-        if ($sameIp->fetch()) {
-            throw new Exception("This IP address has already been used for registration. Multiple accounts from one IP are blocked.");
-        }
-
-        if ($vpnDetected) {
-            throw new Exception("VPN or proxy traffic detected. Please disable the VPN and try again.");
-        }
-
         // Generate user referral code
         $userRefCode = ReferralService::generateUniqueCode();
         $verificationToken = $this->generateSecureToken();
@@ -73,8 +62,8 @@ class AuthService {
         try {
             // 1. Insert User
             $uStmt = $this->db->prepare("
-                INSERT INTO users (referral_code, referred_by, name, email, phone, password_hash, email_verified, email_verification_token, email_verification_expires_at, status, registration_ip, last_seen_ip, device_fingerprint, vpn_detected, vpn_detected_at, suspicious_flags, created_at)
-                VALUES (:ref_code, :referred_by, :name, :email, :phone, :hash, 0, :verify_token, datetime('now', '+1 day'), 'active', :registration_ip, :last_seen_ip, :device_fingerprint, :vpn_detected, :vpn_detected_at, :suspicious_flags, datetime('now'))
+                INSERT INTO users (referral_code, referred_by, name, email, phone, password_hash, email_verified, email_verification_token, email_verification_expires_at, status, registration_ip, last_seen_ip, device_fingerprint, created_at)
+                VALUES (:ref_code, :referred_by, :name, :email, :phone, :hash, 0, :verify_token, datetime('now', '+1 day'), 'active', :registration_ip, :last_seen_ip, :device_fingerprint, datetime('now'))
             ");
             $uStmt->execute([
                 ':ref_code' => $userRefCode,
@@ -87,9 +76,6 @@ class AuthService {
                 ':registration_ip' => $clientIp,
                 ':last_seen_ip' => $clientIp,
                 ':device_fingerprint' => $deviceFingerprint,
-                ':vpn_detected' => $vpnDetected ? 1 : 0,
-                ':vpn_detected_at' => $vpnDetected ? date('Y-m-d H:i:s') : null,
-                ':suspicious_flags' => $vpnDetected ? 'vpn_detected' : '',
             ]);
             $userId = (int)$this->db->lastInsertId();
 
@@ -158,8 +144,8 @@ class AuthService {
             throw new Exception("Your account has been suspended by compliance. Please contact support.");
         }
 
-        if (!empty($user['vpn_detected']) || !empty($user['blocked_reason'])) {
-            throw new Exception("Access restricted due to VPN or suspicious network activity.");
+        if (!empty($user['blocked_reason'])) {
+            throw new Exception("Access restricted due to suspicious account activity.");
         }
 
         // Session Regeneration to eliminate fixation attacks
@@ -409,36 +395,6 @@ class AuthService {
         $ip = $this->resolveClientIp();
         $seed = $ip . '|' . $ua . '|' . $lang . '|' . $accept;
         return hash('sha256', $seed);
-    }
-
-    private function isLikelyVpnOrProxy(string $ip): bool {
-        if (empty($ip) || in_array($ip, ['127.0.0.1', '::1'], true)) {
-            return false;
-        }
-
-        $forwarded = strtolower((string)($_SERVER['HTTP_X_FORWARDED_FOR'] ?? ''));
-        $via = strtolower((string)($_SERVER['HTTP_VIA'] ?? ''));
-        $cf = strtolower((string)($_SERVER['HTTP_CF_CONNECTING_IP'] ?? ''));
-        $userAgent = strtolower((string)($_SERVER['HTTP_USER_AGENT'] ?? ''));
-
-        if (str_contains($forwarded, 'vpn') || str_contains($forwarded, 'proxy') || str_contains($forwarded, 'tor') || str_contains($forwarded, 'anonymous')) {
-            return true;
-        }
-        if (str_contains($via, 'vpn') || str_contains($via, 'proxy') || str_contains($via, 'tor')) {
-            return true;
-        }
-        if (str_contains($cf, 'vpn') || str_contains($cf, 'proxy') || str_contains($cf, 'tor')) {
-            return true;
-        }
-        if (str_contains($userAgent, 'vpn') || str_contains($userAgent, 'proxy') || str_contains($userAgent, 'tor')) {
-            return true;
-        }
-
-        if (str_contains($forwarded, ',') && count(array_filter(array_map('trim', explode(',', $forwarded)))) > 1) {
-            return true;
-        }
-
-        return false;
     }
 
     private function sendEmail(string $toEmail, string $toName, string $subject, string $body, ?string $fallbackLink = null, array $emailTemplate = []): void {
