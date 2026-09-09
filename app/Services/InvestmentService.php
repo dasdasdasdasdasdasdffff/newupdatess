@@ -82,33 +82,40 @@ class InvestmentService {
 
         $invRef = Security::generateRef('INV');
 
-        // Debit wallet with atomic transaction
-        $notes = "Invested in {$plan['name']} (Tenure: {$durationDays} days, Return: {$returnRate}%)";
-        $this->walletService->debitAvailable($userId, $amount, 'investment', $invRef, $notes);
+        $this->db->beginTransaction();
+        try {
+            // Keep the wallet debit and investment record in one transaction.
+            $notes = "Invested in {$plan['name']} (Tenure: {$durationDays} days, Return: {$returnRate}%)";
+            $this->walletService->debitAvailable($userId, $amount, 'investment', $invRef, $notes);
 
-        // Record investment
-        $stmt = $this->db->prepare("
-            INSERT INTO investments 
-            (investment_ref, user_id, plan_id, amount, return_rate, expected_return, accrued_profit, duration_days, total_paid_out, start_date, end_date, next_payout_date, status, created_at)
-            VALUES (:ref, :user_id, :plan_id, :amount, :rate, :expected, '0.00', :duration_days, '0.00', :start, :end, :payout, 'active', CURRENT_TIMESTAMP)
-        ");
-        $stmt->execute([
-            ':ref' => $invRef,
-            ':user_id' => $userId,
-            ':plan_id' => $planId,
-            ':amount' => number_format($amount, 2, '.', ''),
-            ':rate' => number_format($returnRate, 2, '.', ''),
-            ':expected' => number_format($totalExpectedReturn, 2, '.', ''),
-            ':duration_days' => $durationDays,
-            ':start' => $startDate->format('Y-m-d H:i:s'),
-            ':end' => $endDate->format('Y-m-d H:i:s'),
-            ':payout' => $nextPayout->format('Y-m-d H:i:s')
-        ]);
-        $invId = (int)$this->db->lastInsertId();
+            $stmt = $this->db->prepare("
+                INSERT INTO investments
+                (investment_ref, user_id, plan_id, amount, return_rate, expected_return, accrued_profit, duration_days, total_paid_out, start_date, end_date, next_payout_date, status, created_at)
+                VALUES (:ref, :user_id, :plan_id, :amount, :rate, :expected, '0.00', :duration_days, '0.00', :start, :end, :payout, 'active', CURRENT_TIMESTAMP)
+            ");
+            $stmt->execute([
+                ':ref' => $invRef,
+                ':user_id' => $userId,
+                ':plan_id' => $planId,
+                ':amount' => number_format($amount, 2, '.', ''),
+                ':rate' => number_format($returnRate, 2, '.', ''),
+                ':expected' => number_format($totalExpectedReturn, 2, '.', ''),
+                ':duration_days' => $durationDays,
+                ':start' => $startDate->format('Y-m-d H:i:s'),
+                ':end' => $endDate->format('Y-m-d H:i:s'),
+                ':payout' => $nextPayout->format('Y-m-d H:i:s')
+            ]);
+            $invId = (int)$this->db->lastInsertId();
 
-        // Check and trigger referral reward if applicable
-        $refService = new ReferralService($this->db);
-        $refService->processReferralRewardOnInvestment($userId, $invId, $amount);
+            $refService = new ReferralService($this->db);
+            $refService->processReferralRewardOnInvestment($userId, $invId, $amount);
+            $this->db->commit();
+        } catch (Exception $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            throw $e;
+        }
 
         return [
             'success' => true,

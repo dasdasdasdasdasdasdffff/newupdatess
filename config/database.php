@@ -126,6 +126,10 @@ class Database {
                 'processed_by' => 'BIGINT UNSIGNED NULL DEFAULT NULL AFTER reviewed_by',
                 'processed_at' => 'DATETIME NULL DEFAULT NULL AFTER processed_by',
             ],
+            'investments' => [
+                'duration_days' => 'INT NOT NULL DEFAULT 0 AFTER accrued_profit',
+                'total_paid_out' => "DECIMAL(18, 2) NOT NULL DEFAULT '0.00' AFTER duration_days",
+            ],
         ];
 
         foreach ($columns as $table => $tableColumns) {
