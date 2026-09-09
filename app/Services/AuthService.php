@@ -105,7 +105,17 @@ class AuthService {
 
             $this->db->commit();
 
-            $this->sendVerificationEmail($cleanEmail, $cleanName, $verificationToken);
+            // Send verification email in a best-effort background step so registration does not stall
+            // on slow outbound SMTP delivery. The request should complete quickly for the user.
+            try {
+                ignore_user_abort(true);
+                if (function_exists('fastcgi_finish_request')) {
+                    fastcgi_finish_request();
+                }
+                $this->sendVerificationEmail($cleanEmail, $cleanName, $verificationToken);
+            } catch (Throwable $mailError) {
+                error_log('Verification email dispatch failed after registration: ' . $mailError->getMessage());
+            }
 
             return [
                 'success' => true,
@@ -449,13 +459,13 @@ class AuthService {
     }
 
     private function sendViaSmtp(string $host, string $username, string $password, int $port, string $secure, string $toEmail, string $toName, string $subject, string $body, ?string $htmlBody = null): void {
-        $smtp = fsockopen($host, $port, $errno, $errstr, 15);
+        $smtp = fsockopen($host, $port, $errno, $errstr, 5);
         if (!$smtp) {
             error_log('SMTP connect failed: ' . $errstr . ' (' . $errno . ')');
             return;
         }
 
-        stream_set_timeout($smtp, 15);
+        stream_set_timeout($smtp, 5);
         $this->smtpRead($smtp, '220');
 
         $this->smtpCommand($smtp, 'EHLO ' . $host);
