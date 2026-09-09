@@ -100,7 +100,7 @@ class AuthService {
 
             $this->db->commit();
 
-            // Do not make registration wait for a slow SMTP connection.
+            // Do not make registration wait for a slow email provider response.
             $this->queueVerificationEmail($cleanEmail, $cleanName, $verificationToken);
 
             return [
@@ -454,38 +454,52 @@ class AuthService {
     }
 
     private function sendEmail(string $toEmail, string $toName, string $subject, string $body, ?string $fallbackLink = null, array $emailTemplate = [], int $maxAttempts = 3): void {
-        $smtpHost = trim((string)(getenv('APP_SMTP_HOST') ?: 'smtp.gmail.com'), " \t\n\r\0\x0B\"'");
-        $smtpUsername = trim((string)(getenv('APP_SMTP_USERNAME') ?: ''), " \t\n\r\0\x0B\"'");
-        $smtpPassword = trim((string)(getenv('APP_SMTP_PASSWORD') ?: ''), " \t\n\r\0\x0B\"'");
-        $smtpPort = (int)trim((string)(getenv('APP_SMTP_PORT') ?: 587), " \t\n\r\0\x0B\"'");
-        $smtpSecure = strtolower(trim((string)(getenv('APP_SMTP_SECURE') ?: 'tls'), " \t\n\r\0\x0B\"'"));
-
-        if ($smtpUsername === '' || $smtpPassword === '') {
-            throw new Exception('SMTP is not configured. Set APP_SMTP_USERNAME and APP_SMTP_PASSWORD.');
+        $apiKey = trim((string)(getenv('RESEND_API_KEY') ?: ''), " \t\n\r\0\x0B\"'");
+        $from = trim((string)(getenv('RESEND_FROM') ?: 'CapitalNest Nepal <onboarding@resend.dev>'), " \t\n\r\0\x0B\"'");
+        if ($apiKey === '') {
+            throw new Exception('Resend is not configured. Set RESEND_API_KEY.');
         }
 
         $html = $this->buildHtmlEmailTemplate($toName, $subject, $emailTemplate['heading'] ?? 'Action required', $emailTemplate['subtitle'] ?? '', $emailTemplate['primaryText'] ?? $body, $fallbackLink ?? '', $emailTemplate['ctaText'] ?? 'Continue');
         $lastError = null;
-        $endpoints = [[$smtpPort, $smtpSecure]];
-        if ($smtpPort === 587 && $smtpSecure === 'tls') {
-            $endpoints[] = [465, 'ssl'];
-        }
-        foreach ($endpoints as [$endpointPort, $endpointSecure]) {
-            for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
-                try {
-                    $this->sendViaSmtp($smtpHost, $smtpUsername, $smtpPassword, $endpointPort, $endpointSecure, $toEmail, $toName, $subject, $body, $html);
-                    error_log('Verification email accepted by SMTP for recipient domain: ' . (str_contains($toEmail, '@') ? substr(strrchr($toEmail, '@'), 1) : 'unknown'));
-                    return;
-                } catch (Exception $e) {
-                    $lastError = $e;
-                    if ($attempt < $maxAttempts) {
-                        usleep(500000);
-                    }
-                }
+        for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
+            $curl = curl_init('https://api.resend.com/emails');
+            if ($curl === false) {
+                throw new Exception('Unable to initialize Resend HTTP client.');
+            }
+            curl_setopt_array($curl, [
+                CURLOPT_POST => true,
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_TIMEOUT => 15,
+                CURLOPT_HTTPHEADER => [
+                    'Authorization: Bearer ' . $apiKey,
+                    'Content-Type: application/json',
+                ],
+                CURLOPT_POSTFIELDS => json_encode([
+                    'from' => $from,
+                    'to' => [$toEmail],
+                    'subject' => $subject,
+                    'text' => $body,
+                    'html' => $html,
+                ], JSON_THROW_ON_ERROR),
+            ]);
+            $response = curl_exec($curl);
+            $status = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+            $error = curl_error($curl);
+            curl_close($curl);
+
+            if ($response !== false && $status >= 200 && $status < 300) {
+                error_log('Verification email accepted by Resend for recipient domain: ' . (str_contains($toEmail, '@') ? substr(strrchr($toEmail, '@'), 1) : 'unknown'));
+                return;
+            }
+
+            $lastError = new Exception('Resend request failed (HTTP ' . $status . '): ' . ($error !== '' ? $error : (string)$response));
+            if ($attempt < $maxAttempts) {
+                usleep(500000);
             }
         }
 
-        throw new Exception('SMTP delivery failed after ' . $maxAttempts . ' attempt(s): ' . ($lastError?->getMessage() ?? 'unknown error'));
+        throw new Exception('Resend delivery failed after ' . $maxAttempts . ' attempt(s): ' . ($lastError?->getMessage() ?? 'unknown error'));
     }
 
     private function buildHtmlEmailTemplate(string $toName, string $subject, string $heading, string $subtitle, string $primaryText, string $ctaLink, string $ctaText): string {
@@ -521,81 +535,6 @@ class AuthService {
                 </div>
             </div>
         </div>";
-    }
-
-    private function sendViaSmtp(string $host, string $username, string $password, int $port, string $secure, string $toEmail, string $toName, string $subject, string $body, ?string $htmlBody = null): void {
-        // Railway containers may resolve Gmail to IPv6 while lacking IPv6 egress.
-        $ipv4Addresses = gethostbynamel($host);
-        $connectHost = $ipv4Addresses[0] ?? $host;
-        $socketHost = strtolower($secure) === 'ssl' ? 'ssl://' . $connectHost : $connectHost;
-        $smtp = fsockopen($socketHost, $port, $errno, $errstr, 20);
-        if (!$smtp) {
-            throw new Exception('SMTP connect failed: ' . $errstr . ' (' . $errno . ')');
-        }
-
-        try {
-            stream_set_timeout($smtp, 5);
-            $this->smtpRead($smtp, '220');
-
-            $this->smtpCommand($smtp, 'EHLO ' . $host);
-            if (strtolower($secure) === 'tls') {
-                $this->smtpCommand($smtp, 'STARTTLS');
-                if (stream_socket_enable_crypto($smtp, true, STREAM_CRYPTO_METHOD_TLS_CLIENT) !== true) {
-                    throw new Exception('SMTP TLS negotiation failed.');
-                }
-                $this->smtpCommand($smtp, 'EHLO ' . $host);
-            }
-            $this->smtpCommand($smtp, 'AUTH LOGIN');
-            $this->smtpCommand($smtp, base64_encode($username));
-            $this->smtpCommand($smtp, base64_encode($password));
-
-            $fromEmail = $username;
-            $this->smtpCommand($smtp, 'MAIL FROM:<' . $fromEmail . '>');
-            $this->smtpCommand($smtp, 'RCPT TO:<' . $toEmail . '>');
-            $this->smtpCommand($smtp, 'DATA');
-
-            $message = "From: CapitalNest Nepal <{$fromEmail}>\r\n" .
-                "To: {$toName} <{$toEmail}>\r\n" .
-                "Subject: {$subject}\r\n" .
-                "MIME-Version: 1.0\r\n" .
-                "Content-Type: multipart/alternative; boundary=\"cn_boundary\"\r\n\r\n" .
-                "--cn_boundary\r\n" .
-                "Content-Type: text/plain; charset=UTF-8\r\n\r\n" .
-                $body . "\r\n\r\n" .
-                "--cn_boundary\r\n" .
-                "Content-Type: text/html; charset=UTF-8\r\n\r\n" .
-                ($htmlBody ?? $body) . "\r\n\r\n" .
-                "--cn_boundary--\r\n.";
-
-            fwrite($smtp, $message . "\r\n");
-            $this->smtpRead($smtp, '250');
-            $this->smtpCommand($smtp, 'QUIT');
-        } finally {
-            fclose($smtp);
-        }
-    }
-
-    private function smtpCommand($socket, string $command): void {
-        fwrite($socket, $command . "\r\n");
-        $this->smtpRead($socket, null);
-    }
-
-    private function smtpRead($socket, ?string $expectedCode): string {
-        $response = '';
-        while (true) {
-            $line = fgets($socket, 515);
-            if ($line === false) {
-                break;
-            }
-            $response .= $line;
-            if (strlen($line) < 3 || substr($line, 3, 1) !== '-') {
-                break;
-            }
-        }
-        if ($expectedCode !== null && strpos($response, $expectedCode) !== 0) {
-            throw new Exception('SMTP error: ' . trim($response));
-        }
-        return $response;
     }
 
     /**
