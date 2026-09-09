@@ -22,8 +22,4 @@ COPY . /app
 
 EXPOSE 8000
 
-# Mount a Railway volume here when using SQLite. A managed MySQL database is
-# recommended for production and should be configured through DATABASE_URL.
-VOLUME ["/app/storage"]
-
 CMD ["sh", "-c", "php -S 0.0.0.0:${PORT:-8000} -t public public/index.php"]
