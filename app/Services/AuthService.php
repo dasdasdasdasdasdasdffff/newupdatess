@@ -36,6 +36,9 @@ class AuthService {
         if ($this->isIpBlocked($clientIp)) {
             throw new Exception("This IP address is temporarily blocked. Please try again later.");
         }
+        if ($this->hasRegisteredIp($clientIp)) {
+            throw new Exception("This IP address has already been used for registration. Only one account is allowed per IP address.");
+        }
 
         if (!filter_var($cleanEmail, FILTER_VALIDATE_EMAIL)) {
             throw new Exception("Please provide a valid corporate or personal email address.");
@@ -242,14 +245,8 @@ class AuthService {
             $metadata['id'] = (int)$this->db->lastInsertId();
             $device = $metadata;
         }
-        if (!$device && !empty($user['device_fingerprint'])) {
-            throw new Exception("This account is locked to the device used during registration. Sign in from that device and browser.");
-        }
         if (!empty($device['blocked_until']) && strtotime((string)$device['blocked_until']) > time()) {
             throw new Exception("This device has been blocked. Please contact support.");
-        }
-        if (!empty($user['device_fingerprint']) && !hash_equals((string)$user['device_fingerprint'], $currentDeviceFingerprint)) {
-            throw new Exception("This account is locked to the device used during registration. Sign in from that device and browser.");
         }
 
         // Session Regeneration to eliminate fixation attacks
@@ -664,19 +661,19 @@ class AuthService {
         if ($this->db->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql') {
             $stmt = $this->db->prepare("
                 SELECT COUNT(*) FROM registration_attempts
-                WHERE attempted_at >= (CURRENT_TIMESTAMP - INTERVAL 10 MINUTE)
+                WHERE attempted_at >= (CURRENT_TIMESTAMP - INTERVAL 1 MONTH)
                   AND (ip_address = :ip OR device_id = :device_id)
             ");
         } else {
             $stmt = $this->db->prepare("
                 SELECT COUNT(*) FROM registration_attempts
-                WHERE attempted_at >= datetime('now', '-10 minutes')
+                WHERE attempted_at >= datetime('now', '-1 month')
                   AND (ip_address = :ip OR device_id = :device_id)
             ");
         }
         $stmt->execute([':ip' => $ip, ':device_id' => $deviceId]);
-        if ((int)$stmt->fetchColumn() >= 5) {
-            throw new Exception("Too many registration attempts. Please try again later.");
+        if ((int)$stmt->fetchColumn() > 0) {
+            throw new Exception("This device or IP address already has a registration within the last month. Please try again later.");
         }
 
         $insert = $this->db->prepare("
@@ -690,6 +687,17 @@ class AuthService {
         $stmt = $this->db->prepare("
             SELECT id FROM security_ip_blocks
             WHERE ip_address = :ip AND blocked_until > CURRENT_TIMESTAMP
+            LIMIT 1
+        ");
+        $stmt->execute([':ip' => $ip]);
+        return (bool)$stmt->fetchColumn();
+    }
+
+    private function hasRegisteredIp(string $ip): bool {
+        $stmt = $this->db->prepare("
+            SELECT id
+            FROM users
+            WHERE registration_ip = :ip
             LIMIT 1
         ");
         $stmt->execute([':ip' => $ip]);
