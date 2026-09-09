@@ -1,0 +1,6 @@
+{
+  "name": "CapitalNest Nepal",
+  "description": "Premier fintech investment and wealth management platform with database-driven investment plans, wallet transactions, KYC verification, and full-featured banking operations admin suite.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
