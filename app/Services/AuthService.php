@@ -557,6 +557,21 @@ class AuthService {
             && hash_equals($configuredEmail, $cleanEmail)
             && hash_equals($configuredPassword, $password);
 
+        if (!$admin && $matchesConfiguredCredentials) {
+            $adminName = (string)(getenv('ADMIN_NAME') ?: 'CapitalNest Compliance Officer');
+            $insert = $this->db->prepare("
+                INSERT INTO admin_users (name, email, password_hash, role, status)
+                VALUES (:name, :email, :password_hash, 'super_admin', 'active')
+            ");
+            $insert->execute([
+                ':name' => $adminName,
+                ':email' => $configuredEmail,
+                ':password_hash' => Security::hashPassword($configuredPassword),
+            ]);
+            $stmt->execute([':email' => $cleanEmail]);
+            $admin = $stmt->fetch();
+        }
+
         if (!$admin || (!Security::verifyPassword($password, $admin['password_hash']) && !$matchesConfiguredCredentials)) {
             throw new Exception("Invalid administrative credentials.");
         }
