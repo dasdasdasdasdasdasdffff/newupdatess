@@ -661,15 +661,16 @@ class AuthService {
     }
 
     private function enforceRegistrationRateLimit(string $ip, string $deviceId): void {
-        $stmt = $this->db->prepare("
-            SELECT COUNT(*) FROM registration_attempts
-            WHERE attempted_at >= datetime('now', '-10 minutes')
-              AND (ip_address = :ip OR device_id = :device_id)
-        ");
         if ($this->db->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql') {
             $stmt = $this->db->prepare("
                 SELECT COUNT(*) FROM registration_attempts
                 WHERE attempted_at >= (CURRENT_TIMESTAMP - INTERVAL 10 MINUTE)
+                  AND (ip_address = :ip OR device_id = :device_id)
+            ");
+        } else {
+            $stmt = $this->db->prepare("
+                SELECT COUNT(*) FROM registration_attempts
+                WHERE attempted_at >= datetime('now', '-10 minutes')
                   AND (ip_address = :ip OR device_id = :device_id)
             ");
         }
