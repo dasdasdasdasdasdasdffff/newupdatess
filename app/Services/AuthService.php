@@ -454,23 +454,45 @@ class AuthService {
     }
 
     private function sendEmail(string $toEmail, string $toName, string $subject, string $body, ?string $fallbackLink = null, array $emailTemplate = [], int $maxAttempts = 3): void {
-        $host = trim((string)(getenv('RESEND_SMTP_HOST') ?: 'smtp.resend.com'), " \t\n\r\0\x0B\"'");
-        $port = (int)trim((string)(getenv('RESEND_SMTP_PORT') ?: 465), " \t\n\r\0\x0B\"'");
-        $secure = strtolower(trim((string)(getenv('RESEND_SMTP_SECURE') ?: 'ssl'), " \t\n\r\0\x0B\"'"));
-        $username = trim((string)(getenv('RESEND_SMTP_USERNAME') ?: 'resend'), " \t\n\r\0\x0B\"'");
-        $password = trim((string)(getenv('RESEND_SMTP_PASSWORD') ?: ''), " \t\n\r\0\x0B\"'");
-        $from = trim((string)(getenv('RESEND_FROM') ?: 'CapitalNest Nepal <admin@capitalnest.np>'), " \t\n\r\0\x0B\"'");
-        if ($password === '') {
-            throw new Exception('Resend SMTP is not configured. Set RESEND_SMTP_PASSWORD.');
+        $apiKey = trim((string)(getenv('RESEND_API_KEY') ?: ''), " \t\n\r\0\x0B\"'");
+        $from = trim((string)(getenv('RESEND_FROM') ?: 'CapitalNest Nepal <no-reply@capitalnestnepal.com>'), " \t\n\r\0\x0B\"'");
+        if ($apiKey === '') {
+            throw new Exception('Resend API is not configured. Set RESEND_API_KEY.');
         }
 
         $html = $this->buildHtmlEmailTemplate($toName, $subject, $emailTemplate['heading'] ?? 'Action required', $emailTemplate['subtitle'] ?? '', $emailTemplate['primaryText'] ?? $body, $fallbackLink ?? '', $emailTemplate['ctaText'] ?? 'Continue');
         $lastError = null;
         for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
             try {
-                $this->sendViaSmtp($host, $port, $secure, $username, $password, $from, $toEmail, $toName, $subject, $body, $html);
-                error_log('Email accepted by Resend SMTP for recipient domain: ' . (str_contains($toEmail, '@') ? substr(strrchr($toEmail, '@'), 1) : 'unknown'));
-                return;
+                $curl = curl_init('https://api.resend.com/emails');
+                if ($curl === false) {
+                    throw new Exception('Unable to initialize Resend HTTP client.');
+                }
+                curl_setopt_array($curl, [
+                    CURLOPT_POST => true,
+                    CURLOPT_RETURNTRANSFER => true,
+                    CURLOPT_TIMEOUT => 15,
+                    CURLOPT_HTTPHEADER => [
+                        'Authorization: Bearer ' . $apiKey,
+                        'Content-Type: application/json',
+                    ],
+                    CURLOPT_POSTFIELDS => json_encode([
+                        'from' => $from,
+                        'to' => [$toEmail],
+                        'subject' => $subject,
+                        'text' => $body,
+                        'html' => $html,
+                    ], JSON_THROW_ON_ERROR),
+                ]);
+                $response = curl_exec($curl);
+                $status = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+                $error = curl_error($curl);
+                curl_close($curl);
+                if ($response !== false && $status >= 200 && $status < 300) {
+                    error_log('Email accepted by Resend API for recipient domain: ' . (str_contains($toEmail, '@') ? substr(strrchr($toEmail, '@'), 1) : 'unknown'));
+                    return;
+                }
+                throw new Exception('Resend API request failed (HTTP ' . $status . '): ' . ($error !== '' ? $error : (string)$response));
             } catch (Exception $e) {
                 $lastError = $e;
                 if ($attempt < $maxAttempts) {
@@ -479,7 +501,7 @@ class AuthService {
             }
         }
 
-        throw new Exception('Resend SMTP delivery failed after ' . $maxAttempts . ' attempt(s): ' . ($lastError?->getMessage() ?? 'unknown error'));
+        throw new Exception('Resend API delivery failed after ' . $maxAttempts . ' attempt(s): ' . ($lastError?->getMessage() ?? 'unknown error'));
     }
 
     private function buildHtmlEmailTemplate(string $toName, string $subject, string $heading, string $subtitle, string $primaryText, string $ctaLink, string $ctaText): string {
@@ -517,72 +539,6 @@ class AuthService {
         </div>";
     }
 
-    private function sendViaSmtp(string $host, int $port, string $secure, string $username, string $password, string $from, string $toEmail, string $toName, string $subject, string $body, string $html): void {
-        $socketHost = $secure === 'ssl' ? 'ssl://' . $host : $host;
-        $socket = fsockopen($socketHost, $port, $errno, $errstr, 15);
-        if (!$socket) {
-            throw new Exception('Resend SMTP connection failed: ' . $errstr . ' (' . $errno . ')');
-        }
-
-        try {
-            stream_set_timeout($socket, 10);
-            $this->smtpRead($socket, '220');
-            $this->smtpCommand($socket, 'EHLO capitalnest.np');
-            if ($secure === 'tls') {
-                $this->smtpCommand($socket, 'STARTTLS');
-                if (stream_socket_enable_crypto($socket, true, STREAM_CRYPTO_METHOD_TLS_CLIENT) !== true) {
-                    throw new Exception('Resend SMTP TLS negotiation failed.');
-                }
-                $this->smtpCommand($socket, 'EHLO capitalnest.np');
-            }
-            $this->smtpCommand($socket, 'AUTH LOGIN');
-            $this->smtpCommand($socket, base64_encode($username));
-            $this->smtpCommand($socket, base64_encode($password));
-            $this->smtpCommand($socket, 'MAIL FROM:<' . $this->extractEmailAddress($from) . '>');
-            $this->smtpCommand($socket, 'RCPT TO:<' . $toEmail . '>');
-            $this->smtpCommand($socket, 'DATA');
-
-            $message = "From: {$from}\r\n" .
-                "To: {$toName} <{$toEmail}>\r\n" .
-                "Subject: {$subject}\r\n" .
-                "MIME-Version: 1.0\r\n" .
-                "Content-Type: multipart/alternative; boundary=\"cn_boundary\"\r\n\r\n" .
-                "--cn_boundary\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n" .
-                $body . "\r\n\r\n--cn_boundary\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n" .
-                $html . "\r\n\r\n--cn_boundary--\r\n.";
-            fwrite($socket, $message . "\r\n");
-            $this->smtpRead($socket, '250');
-            $this->smtpCommand($socket, 'QUIT');
-        } finally {
-            fclose($socket);
-        }
-    }
-
-    private function smtpCommand($socket, string $command): void {
-        fwrite($socket, $command . "\r\n");
-        $this->smtpRead($socket, null);
-    }
-
-    private function smtpRead($socket, ?string $expectedCode): string {
-        $response = '';
-        while (($line = fgets($socket, 515)) !== false) {
-            $response .= $line;
-            if (strlen($line) < 4 || $line[3] !== '-') {
-                break;
-            }
-        }
-        if ($expectedCode !== null && strpos($response, $expectedCode) !== 0) {
-            throw new Exception('Resend SMTP error: ' . trim($response));
-        }
-        return $response;
-    }
-
-    private function extractEmailAddress(string $from): string {
-        if (preg_match('/<([^>]+)>/', $from, $matches)) {
-            return $matches[1];
-        }
-        return $from;
-    }
 
     /**
      * Admin Login (Completely segregated from user sessions)
