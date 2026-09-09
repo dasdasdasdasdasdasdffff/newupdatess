@@ -100,8 +100,8 @@ class AuthService {
 
             $this->db->commit();
 
-            // Deliver before redirecting so SMTP failures are visible and the user can retry.
-            $this->sendVerificationEmail($cleanEmail, $cleanName, $verificationToken);
+            // Do not make registration wait for a slow SMTP connection.
+            $this->queueVerificationEmail($cleanEmail, $cleanName, $verificationToken);
 
             return [
                 'success' => true,
@@ -370,8 +370,8 @@ class AuthService {
         return ['success' => true, 'message' => 'Admin password updated successfully.'];
     }
 
-    private function sendVerificationEmail(string $email, string $name, string $token): void {
-        $baseUrl = rtrim((string)($_SERVER['APP_URL'] ?? ((isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ? 'https://' : 'http://') . ($_SERVER['HTTP_HOST'] ?? '127.0.0.1:8000')), '/');
+    private function sendVerificationEmail(string $email, string $name, string $token, int $maxAttempts = 3): void {
+        $baseUrl = rtrim((string)(getenv('APP_URL') ?: ((isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ? 'https://' : 'http://') . ($_SERVER['HTTP_HOST'] ?? '127.0.0.1:8000')), '/');
         $verificationLink = $baseUrl . '/verify-email?token=' . urlencode($token);
         $this->sendEmail(
             $email,
@@ -388,8 +388,27 @@ class AuthService {
                 'subtitle' => 'Welcome to CapitalNest Nepal. Please confirm your email address to activate your account.',
                 'ctaText' => 'Verify Email',
                 'primaryText' => 'This verification link is unique to your account and expires in 24 hours.',
-            ]
+            ],
+            $maxAttempts
         );
+    }
+
+    private function queueVerificationEmail(string $email, string $name, string $token): void {
+        $send = function () use ($email, $name, $token): void {
+            try {
+                $this->sendVerificationEmail($email, $name, $token, 1);
+            } catch (\Throwable $mailError) {
+                error_log('Verification email dispatch failed after registration: ' . $mailError->getMessage());
+            }
+        };
+
+        if (function_exists('fastcgi_finish_request')) {
+            register_shutdown_function($send);
+            return;
+        }
+
+        // The PHP built-in server has no response-finalization hook.
+        register_shutdown_function($send);
     }
 
     private function generateSecureToken(): string {
@@ -434,7 +453,7 @@ class AuthService {
         return hash('sha256', $seed);
     }
 
-    private function sendEmail(string $toEmail, string $toName, string $subject, string $body, ?string $fallbackLink = null, array $emailTemplate = []): void {
+    private function sendEmail(string $toEmail, string $toName, string $subject, string $body, ?string $fallbackLink = null, array $emailTemplate = [], int $maxAttempts = 3): void {
         $smtpHost = trim((string)(getenv('APP_SMTP_HOST') ?: 'smtp.gmail.com'), " \t\n\r\0\x0B\"'");
         $smtpUsername = trim((string)(getenv('APP_SMTP_USERNAME') ?: ''), " \t\n\r\0\x0B\"'");
         $smtpPassword = trim((string)(getenv('APP_SMTP_PASSWORD') ?: ''), " \t\n\r\0\x0B\"'");
@@ -452,21 +471,21 @@ class AuthService {
             $endpoints[] = [465, 'ssl'];
         }
         foreach ($endpoints as [$endpointPort, $endpointSecure]) {
-            for ($attempt = 1; $attempt <= 3; $attempt++) {
+            for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
                 try {
                     $this->sendViaSmtp($smtpHost, $smtpUsername, $smtpPassword, $endpointPort, $endpointSecure, $toEmail, $toName, $subject, $body, $html);
                     error_log('Verification email accepted by SMTP for recipient domain: ' . (str_contains($toEmail, '@') ? substr(strrchr($toEmail, '@'), 1) : 'unknown'));
                     return;
                 } catch (Exception $e) {
                     $lastError = $e;
-                    if ($attempt < 3) {
+                    if ($attempt < $maxAttempts) {
                         usleep(500000);
                     }
                 }
             }
         }
 
-        throw new Exception('SMTP delivery failed after 3 attempts: ' . ($lastError?->getMessage() ?? 'unknown error'));
+        throw new Exception('SMTP delivery failed after ' . $maxAttempts . ' attempt(s): ' . ($lastError?->getMessage() ?? 'unknown error'));
     }
 
     private function buildHtmlEmailTemplate(string $toName, string $subject, string $heading, string $subtitle, string $primaryText, string $ctaLink, string $ctaText): string {
