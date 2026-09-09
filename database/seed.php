@@ -272,7 +272,7 @@ function runMigrationAndSeed(): void {
         $pwHash = password_hash('Admin@CapitalNest2026!', PASSWORD_BCRYPT);
         $stmt = $db->prepare("INSERT INTO admin_users (name, email, password_hash, role, status) VALUES (?, ?, ?, ?, 'active')");
         $stmt->execute(['CapitalNest Compliance Officer', 'admin@capitalnest.np', $pwHash, 'super_admin']);
-        echo "Created super admin: admin@capitalnest.np / Admin@CapitalNest2026!\n";
+        echo "Created 1 super admin account.\n";
     }
 
     // --- LIVE STATE: no demo investor/wallet data seeded ---
