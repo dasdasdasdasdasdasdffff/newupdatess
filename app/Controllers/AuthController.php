@@ -43,7 +43,15 @@ class AuthController {
             exit;
         } catch (Exception $e) {
             if ($isAjax) {
-                Security::jsonResponse(['success' => false, 'error' => $e->getMessage()], 400);
+                Security::jsonResponse([
+                    'success' => false,
+                    'error' => $e->getMessage(),
+                    'verification_required' => $e->getCode() === 1001,
+                ], $e->getCode() === 1001 ? 403 : 400);
+            }
+            if ($e->getCode() === 1001) {
+                header('Location: /register/pending?email=' . urlencode((string)$email) . '&error=' . urlencode($e->getMessage()));
+                exit;
             }
             header('Location: /login?error=' . urlencode($e->getMessage()));
             exit;
@@ -55,6 +63,8 @@ class AuthController {
             header('Location: /dashboard');
             exit;
         }
+        // Set the device cookie before the registration form is submitted.
+        $this->authService->prepareRegistrationDevice();
         $csrf = Security::generateCsrfToken();
         $ref = $_GET['ref'] ?? '';
         $error = $_GET['error'] ?? null;

@@ -44,8 +44,8 @@ class AdminController {
         $admin = AdminMiddleware::handle();
 
         // 1. User counts
-        $totalUsers = (int)$this->db->query("SELECT COUNT(*) FROM users")->fetchColumn();
-        $activeUsers = (int)$this->db->query("SELECT COUNT(*) FROM users WHERE status = 'active'")->fetchColumn();
+        $totalUsers = (int)$this->db->query("SELECT COUNT(*) FROM users WHERE email_verified = 1")->fetchColumn();
+        $activeUsers = (int)$this->db->query("SELECT COUNT(*) FROM users WHERE email_verified = 1 AND status = 'active'")->fetchColumn();
 
         // 2. Pending operational queues
         $pendingKyc = (int)$this->db->query("SELECT COUNT(*) FROM kyc_requests WHERE status = 'pending'")->fetchColumn();
@@ -62,19 +62,19 @@ class AdminController {
         // 4. Recent pending queues
         $recentDeposits = $this->db->query("
             SELECT d.*, u.name as user_name, u.email as user_email 
-            FROM deposits d JOIN users u ON d.user_id = u.id 
+            FROM deposits d JOIN users u ON d.user_id = u.id AND u.email_verified = 1
             ORDER BY d.id DESC LIMIT 5
         ")->fetchAll();
 
         $recentWithdrawals = $this->db->query("
             SELECT w.*, u.name as user_name, u.email as user_email 
-            FROM withdrawals w JOIN users u ON w.user_id = u.id 
+            FROM withdrawals w JOIN users u ON w.user_id = u.id AND u.email_verified = 1
             ORDER BY w.id DESC LIMIT 5
         ")->fetchAll();
 
         $recentKycs = $this->db->query("
             SELECT k.*, u.name as user_name, u.email as user_email 
-            FROM kyc_requests k JOIN users u ON k.user_id = u.id 
+            FROM kyc_requests k JOIN users u ON k.user_id = u.id AND u.email_verified = 1
             ORDER BY k.id DESC LIMIT 5
         ")->fetchAll();
 
@@ -99,7 +99,7 @@ class AdminController {
             (SELECT COUNT(*) FROM referrals WHERE referrer_id = u.id) as referral_count
             FROM users u
             LEFT JOIN wallets w ON u.id = w.user_id
-            WHERE 1=1
+            WHERE u.email_verified = 1
         ";
         $params = [];
 
@@ -136,7 +136,7 @@ class AdminController {
     public function userDetail(int $userId): void {
         $admin = AdminMiddleware::handle();
 
-        $uStmt = $this->db->prepare("SELECT * FROM users WHERE id = :id LIMIT 1");
+        $uStmt = $this->db->prepare("SELECT * FROM users WHERE id = :id AND email_verified = 1 LIMIT 1");
         $uStmt->execute([':id' => $userId]);
         $targetUser = $uStmt->fetch();
         if (!$targetUser) {
@@ -159,7 +159,7 @@ class AdminController {
         // Referrals
         $rStmt = $this->db->prepare("
             SELECT r.*, u.name, u.email FROM referrals r 
-            JOIN users u ON r.referred_user_id = u.id 
+            JOIN users u ON r.referred_user_id = u.id AND u.email_verified = 1
             WHERE r.referrer_id = :id
         ");
         $rStmt->execute([':id' => $userId]);
@@ -249,7 +249,7 @@ class AdminController {
         $sql = "
             SELECT d.*, u.name as user_name, u.email as user_email, u.phone as user_phone
             FROM deposits d
-            JOIN users u ON d.user_id = u.id
+            JOIN users u ON d.user_id = u.id AND u.email_verified = 1
             WHERE 1=1
         ";
         if ($filter !== 'all') {
@@ -317,7 +317,7 @@ class AdminController {
             SELECT w.*, u.name as user_name, u.email as user_email, u.phone as user_phone,
             wal.available_balance as current_balance
             FROM withdrawals w
-            JOIN users u ON w.user_id = u.id
+            JOIN users u ON w.user_id = u.id AND u.email_verified = 1
             LEFT JOIN wallets wal ON u.id = wal.user_id
             WHERE 1=1
         ";
@@ -384,7 +384,7 @@ class AdminController {
         $sql = "
             SELECT k.*, u.name as user_name, u.email as user_email, u.phone as user_phone
             FROM kyc_requests k
-            JOIN users u ON k.user_id = u.id
+            JOIN users u ON k.user_id = u.id AND u.email_verified = 1
             WHERE 1=1
         ";
         if ($filter !== 'all') {
@@ -450,7 +450,7 @@ class AdminController {
         $investments = $this->db->query("
             SELECT i.*, u.name as user_name, u.email as user_email, p.name as plan_name
             FROM investments i
-            JOIN users u ON i.user_id = u.id
+            JOIN users u ON i.user_id = u.id AND u.email_verified = 1
             JOIN investment_plans p ON i.plan_id = p.id
             ORDER BY i.id DESC LIMIT 50
         ")->fetchAll();
@@ -511,7 +511,7 @@ class AdminController {
         $sql = "
             SELECT t.*, u.name as user_name, u.email as user_email
             FROM wallet_transactions t
-            JOIN users u ON t.user_id = u.id
+            JOIN users u ON t.user_id = u.id AND u.email_verified = 1
             WHERE 1=1
         ";
         $params = [];
@@ -543,8 +543,8 @@ class AdminController {
             referrer.name as referrer_name, referrer.email as referrer_email,
             referred.name as referred_name, referred.email as referred_email
             FROM referrals r
-            JOIN users referrer ON r.referrer_id = referrer.id
-            JOIN users referred ON r.referred_user_id = referred.id
+            JOIN users referrer ON r.referrer_id = referrer.id AND referrer.email_verified = 1
+            JOIN users referred ON r.referred_user_id = referred.id AND referred.email_verified = 1
             ORDER BY r.id DESC
         ")->fetchAll();
 
@@ -555,8 +555,8 @@ class AdminController {
                    inv.amount as investment_amount,
                    re.amount as commission_amount
             FROM referral_earnings re
-            JOIN users u ON re.user_id = u.id
-            JOIN users ref ON re.from_user_id = ref.id
+            JOIN users u ON re.user_id = u.id AND u.email_verified = 1
+            JOIN users ref ON re.from_user_id = ref.id AND ref.email_verified = 1
             LEFT JOIN investments inv ON re.investment_id = inv.id
             ORDER BY re.id DESC LIMIT 50
         ")->fetchAll();
@@ -573,7 +573,7 @@ class AdminController {
         $notifications = $this->db->query("
             SELECT n.*, u.name as user_name, u.email as user_email
             FROM notifications n
-            JOIN users u ON n.user_id = u.id
+            JOIN users u ON n.user_id = u.id AND u.email_verified = 1
             ORDER BY n.id DESC LIMIT 50
         ")->fetchAll();
 
@@ -595,7 +595,7 @@ class AdminController {
         }
 
         if ($target === 'all') {
-            $users = $this->db->query("SELECT id FROM users WHERE status = 'active'")->fetchAll();
+            $users = $this->db->query("SELECT id FROM users WHERE email_verified = 1 AND status = 'active'")->fetchAll();
             $stmt = $this->db->prepare("
                 INSERT INTO notifications (user_id, title, message, type, is_read, created_at)
                 VALUES (:uid, :title, :message, :type, 0, CURRENT_TIMESTAMP)
@@ -635,7 +635,7 @@ class AdminController {
         $tickets = $this->db->query("
             SELECT t.*, u.name as user_name, u.email as user_email
             FROM support_tickets t
-            JOIN users u ON t.user_id = u.id
+            JOIN users u ON t.user_id = u.id AND u.email_verified = 1
             ORDER BY t.id DESC
         ")->fetchAll();
 
@@ -648,7 +648,7 @@ class AdminController {
         $tStmt = $this->db->prepare("
             SELECT t.*, u.name as user_name, u.email as user_email 
             FROM support_tickets t 
-            JOIN users u ON t.user_id = u.id 
+            JOIN users u ON t.user_id = u.id AND u.email_verified = 1
             WHERE t.id = :id LIMIT 1
         ");
         $tStmt->execute([':id' => $ticketId]);

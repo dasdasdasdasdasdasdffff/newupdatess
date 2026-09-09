@@ -11,6 +11,7 @@ namespace App\Services;
 use Config\Database;
 use App\Helpers\Security;
 use PDO;
+use PDOException;
 use Exception;
 
 class AuthService {
@@ -36,6 +37,7 @@ class AuthService {
         if (!filter_var($cleanEmail, FILTER_VALIDATE_EMAIL)) {
             throw new Exception("Please provide a valid corporate or personal email address.");
         }
+
         if (strlen($password) < 8) {
             throw new Exception("Password must contain at least 8 characters.");
         }
@@ -74,19 +76,26 @@ class AuthService {
                 INSERT INTO users (referral_code, referred_by, name, email, phone, password_hash, email_verified, email_verification_token, email_verification_expires_at, status, registration_ip, last_seen_ip, device_fingerprint, created_at)
                 VALUES (:ref_code, :referred_by, :name, :email, :phone, :hash, 0, :verify_token, :expires_at, 'active', :registration_ip, :last_seen_ip, :device_fingerprint, CURRENT_TIMESTAMP)
             ");
-            $uStmt->execute([
-                ':ref_code' => $userRefCode,
-                ':referred_by' => $referralCode ? strtoupper(trim($referralCode)) : null,
-                ':name' => Security::sanitize($cleanName),
-                ':email' => $cleanEmail,
-                ':phone' => Security::sanitize($cleanPhone),
-                ':hash' => $passwordHash,
-                ':verify_token' => $verificationToken,
-                ':expires_at' => $expiresAt,
-                ':registration_ip' => $clientIp,
-                ':last_seen_ip' => $clientIp,
-                ':device_fingerprint' => $deviceFingerprint,
-            ]);
+            try {
+                $uStmt->execute([
+                    ':ref_code' => $userRefCode,
+                    ':referred_by' => $referralCode ? strtoupper(trim($referralCode)) : null,
+                    ':name' => Security::sanitize($cleanName),
+                    ':email' => $cleanEmail,
+                    ':phone' => Security::sanitize($cleanPhone),
+                    ':hash' => $passwordHash,
+                    ':verify_token' => $verificationToken,
+                    ':expires_at' => $expiresAt,
+                    ':registration_ip' => $clientIp,
+                    ':last_seen_ip' => $clientIp,
+                    ':device_fingerprint' => $deviceFingerprint,
+                ]);
+            } catch (PDOException $e) {
+                if ($e->getCode() === '23000') {
+                    throw new Exception("This device has already been used to register an account. Only one account is allowed per device.", 0, $e);
+                }
+                throw $e;
+            }
             $userId = (int)$this->db->lastInsertId();
 
             // 2. Initialize Profile
@@ -133,6 +142,10 @@ class AuthService {
         }
     }
 
+    public function prepareRegistrationDevice(): void {
+        $this->generateDeviceFingerprint();
+    }
+
     /**
      * User Login with Session Fixation Protection (session_regenerate_id)
      */
@@ -151,12 +164,21 @@ class AuthService {
             throw new Exception("Invalid email or password. If you forgot it, use Forgot password.");
         }
 
+        if ((int)($user['email_verified'] ?? 0) !== 1) {
+            throw new Exception("Please verify your email address before signing in. Check your inbox for the verification link.", 1001);
+        }
+
         if ($user['status'] === 'suspended') {
             throw new Exception("Your account has been suspended by compliance. Please contact support.");
         }
 
         if (!empty($user['blocked_reason'])) {
             throw new Exception("Access restricted due to suspicious account activity.");
+        }
+
+        $currentDeviceFingerprint = $this->generateDeviceFingerprint();
+        if (!empty($user['device_fingerprint']) && !hash_equals((string)$user['device_fingerprint'], $currentDeviceFingerprint)) {
+            throw new Exception("This account is locked to the device used during registration. Sign in from that device and browser.");
         }
 
         // Session Regeneration to eliminate fixation attacks
@@ -174,7 +196,7 @@ class AuthService {
         $upd = $this->db->prepare("UPDATE users SET last_login_at = CURRENT_TIMESTAMP, last_login_ip = :ip, last_seen_ip = :ip, device_fingerprint = COALESCE(device_fingerprint, :device_fingerprint) WHERE id = :id");
         $upd->execute([
             ':ip' => $ip,
-            ':device_fingerprint' => $this->generateDeviceFingerprint(),
+            ':device_fingerprint' => $currentDeviceFingerprint,
             ':id' => $user['id']
         ]);
 

@@ -101,6 +101,7 @@ class Database {
             if ($hasUsersTable) {
                 self::ensureMysqlSessionTable($pdo);
                 self::ensureMysqlColumns($pdo);
+                self::ensureMysqlDeviceFingerprintIndex($pdo);
                 self::backfillMysqlReferrals($pdo);
                 return;
             }
@@ -111,6 +112,7 @@ class Database {
             }
             self::ensureMysqlSessionTable($pdo);
             self::ensureMysqlColumns($pdo);
+            self::ensureMysqlDeviceFingerprintIndex($pdo);
             self::backfillMysqlReferrals($pdo);
             return;
         }
@@ -164,6 +166,34 @@ class Database {
                         throw $e;
                     }
                 }
+
+            }
+        }
+    }
+
+    private static function ensureMysqlDeviceFingerprintIndex(PDO $pdo): void {
+        $duplicate = $pdo->query("
+            SELECT device_fingerprint
+            FROM users
+            WHERE device_fingerprint IS NOT NULL
+            GROUP BY device_fingerprint
+            HAVING COUNT(*) > 1
+            LIMIT 1
+        ")->fetchColumn();
+        if ($duplicate !== false) {
+            error_log('Device fingerprint uniqueness index skipped because duplicate legacy fingerprints exist.');
+            return;
+        }
+
+        if ($pdo->query("SHOW INDEX FROM users WHERE Key_name = 'uk_users_device_fingerprint'")->fetch()) {
+            return;
+        }
+
+        try {
+            $pdo->exec("ALTER TABLE users ADD UNIQUE KEY uk_users_device_fingerprint (device_fingerprint)");
+        } catch (PDOException $e) {
+            if ($e->getCode() !== '42000' && $e->getCode() !== '42S11' && !str_contains($e->getMessage(), 'Duplicate key name')) {
+                throw $e;
             }
         }
     }
@@ -207,6 +237,24 @@ class Database {
         }
 
         self::ensureSqliteColumns($pdo);
+        self::ensureSqliteDeviceFingerprintIndex($pdo);
+    }
+
+    private static function ensureSqliteDeviceFingerprintIndex(PDO $pdo): void {
+        $duplicate = $pdo->query("
+            SELECT device_fingerprint
+            FROM users
+            WHERE device_fingerprint IS NOT NULL
+            GROUP BY device_fingerprint
+            HAVING COUNT(*) > 1
+            LIMIT 1
+        ")->fetchColumn();
+        if ($duplicate !== false) {
+            error_log('Device fingerprint uniqueness index skipped because duplicate legacy fingerprints exist.');
+            return;
+        }
+
+        $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS uk_users_device_fingerprint ON users (device_fingerprint)");
     }
 
     private static function getSqlitePath(): string {

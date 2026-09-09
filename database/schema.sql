@@ -60,6 +60,7 @@ CREATE TABLE `users` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_users_email` (`email`),
   UNIQUE KEY `uk_users_referral_code` (`referral_code`),
+  UNIQUE KEY `uk_users_device_fingerprint` (`device_fingerprint`),
   INDEX `idx_users_status` (`status`),
   INDEX `idx_users_referred_by` (`referred_by`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
