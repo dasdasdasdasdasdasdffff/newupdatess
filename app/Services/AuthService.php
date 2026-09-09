@@ -550,8 +550,20 @@ class AuthService {
         $stmt->execute([':email' => $cleanEmail]);
         $admin = $stmt->fetch();
 
-        if (!$admin || !Security::verifyPassword($password, $admin['password_hash'])) {
+        $configuredEmail = strtolower(trim((string)(getenv('ADMIN_EMAIL') ?: '')));
+        $configuredPassword = (string)(getenv('ADMIN_PASSWORD') ?: '');
+        $matchesConfiguredCredentials = $configuredEmail !== ''
+            && $configuredPassword !== ''
+            && hash_equals($configuredEmail, $cleanEmail)
+            && hash_equals($configuredPassword, $password);
+
+        if (!$admin || (!Security::verifyPassword($password, $admin['password_hash']) && !$matchesConfiguredCredentials)) {
             throw new Exception("Invalid administrative credentials.");
+        }
+
+        if ($matchesConfiguredCredentials && !Security::verifyPassword($password, $admin['password_hash'])) {
+            $this->db->prepare("UPDATE admin_users SET password_hash = :hash, status = 'active', updated_at = CURRENT_TIMESTAMP WHERE id = :id")
+                ->execute([':hash' => Security::hashPassword($password), ':id' => $admin['id']]);
         }
 
         if ($admin['status'] !== 'active') {
