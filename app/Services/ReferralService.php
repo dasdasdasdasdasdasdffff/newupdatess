@@ -57,26 +57,49 @@ class ReferralService {
         $referredUserReward = 50.00;
 
         $ins = $this->db->prepare("
-            INSERT INTO referrals (referrer_id, referred_user_id, referral_code, status, reward_amount, rewarded_at, created_at)
-            VALUES (:referrer, :referred, :code, 'rewarded', :reward, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            INSERT INTO referrals (referrer_id, referred_user_id, referral_code, status, reward_amount, created_at)
+            VALUES (:referrer, :referred, :code, 'pending', 0.00, CURRENT_TIMESTAMP)
         ");
         $ins->execute([
             ':referrer' => $referrerId,
             ':referred' => $referredUserId,
-            ':code' => $cleanCode,
-            ':reward' => $referrerReward
+            ':code' => $cleanCode
         ]);
 
-        $this->creditRegistrationReward(
-            $referrerId,
-            $referrerReward,
-            'Referral reward for registering a new partner'
-        );
-        $this->creditRegistrationReward(
-            $referredUserId,
-            $referredUserReward,
-            'Welcome reward for registering with a referral code'
-        );
+        return true;
+    }
+
+    public function activateVerifiedReferral(int $referredUserId): void {
+        $stmt = $this->db->prepare("
+            SELECT r.*, u.email_verified
+            FROM referrals r
+            JOIN users u ON u.id = r.referred_user_id
+            WHERE r.referred_user_id = :uid AND r.status = 'pending'
+            LIMIT 1
+        ");
+        $stmt->execute([':uid' => $referredUserId]);
+        $referral = $stmt->fetch();
+
+        if (!$referral || (int)$referral['email_verified'] !== 1) {
+            return;
+        }
+
+        $referrerId = (int)$referral['referrer_id'];
+        $referrerReward = 100.00;
+        $referredUserReward = 50.00;
+
+        $this->creditRegistrationReward($referrerId, $referrerReward, 'Referral reward for verified partner');
+        $this->creditRegistrationReward($referredUserId, $referredUserReward, 'Welcome reward after email verification');
+
+        $update = $this->db->prepare("
+            UPDATE referrals
+            SET status = 'rewarded', reward_amount = :reward, rewarded_at = CURRENT_TIMESTAMP
+            WHERE id = :id AND status = 'pending'
+        ");
+        $update->execute([
+            ':reward' => $referrerReward,
+            ':id' => (int)$referral['id']
+        ]);
 
         $notification = $this->db->prepare("
             INSERT INTO notifications (user_id, title, message, type, is_read, created_at)
@@ -90,10 +113,8 @@ class ReferralService {
         $notification->execute([
             ':uid' => $referredUserId,
             ':title' => 'Referral Welcome Reward',
-            ':message' => 'NPR 50.00 has been added to your main balance for registering with a referral code.'
+            ':message' => 'NPR 50.00 has been added to your main balance after email verification.'
         ]);
-
-        return true;
     }
 
     private function creditRegistrationReward(int $userId, float $amount, string $notes): void {
@@ -226,7 +247,7 @@ class ReferralService {
             SELECT r.*, u.name, u.email, u.name as referred_name, u.email as referred_email, u.created_at as joined_at
             FROM referrals r
             JOIN users u ON r.referred_user_id = u.id
-            WHERE r.referrer_id = :uid
+            WHERE r.referrer_id = :uid AND u.email_verified = 1
             ORDER BY r.id DESC
         ");
         $listStmt->execute([':uid' => $userId]);

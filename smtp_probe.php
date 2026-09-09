@@ -1,8 +1,8 @@
 <?php
-$host = 'smtp.gmail.com';
-$user = 'capitalnestnepalpvtltd@gmail.com';
-$pass = 'uujgchxumlqgsejb';
-$port = 587;
+$host = getenv('APP_SMTP_HOST') ?: 'smtp.gmail.com';
+$user = getenv('APP_SMTP_USERNAME') ?: '';
+$pass = getenv('APP_SMTP_PASSWORD') ?: '';
+$port = (int)(getenv('APP_SMTP_PORT') ?: 587);
 
 $smtp = fsockopen($host, $port, $errno, $errstr, 20);
 if (!$smtp) {

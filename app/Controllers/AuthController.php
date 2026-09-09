@@ -88,7 +88,20 @@ class AuthController {
 
     public function showPendingVerification(): void {
         $email = $_GET['email'] ?? '';
+        $success = $_GET['success'] ?? null;
+        $error = $_GET['error'] ?? null;
         require dirname(__DIR__) . '/Views/auth/verification_pending.php';
+    }
+
+    public function resendVerification(): void {
+        $email = $_GET['email'] ?? '';
+        try {
+            $this->authService->resendVerificationEmail($email);
+            header('Location: /register/pending?email=' . urlencode($email) . '&success=' . urlencode('A new verification email has been sent.'));
+        } catch (Exception $e) {
+            header('Location: /register/pending?email=' . urlencode($email) . '&error=' . urlencode($e->getMessage()));
+        }
+        exit;
     }
 
     public function verifyEmail(): void {

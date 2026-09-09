@@ -107,17 +107,8 @@ class AuthService {
 
             $this->db->commit();
 
-            // Send verification email in a best-effort background step so registration does not stall
-            // on slow outbound SMTP delivery. The request should complete quickly for the user.
-            try {
-                ignore_user_abort(true);
-                if (function_exists('fastcgi_finish_request')) {
-                    fastcgi_finish_request();
-                }
-                $this->sendVerificationEmail($cleanEmail, $cleanName, $verificationToken);
-            } catch (Throwable $mailError) {
-                error_log('Verification email dispatch failed after registration: ' . $mailError->getMessage());
-            }
+            // Deliver before redirecting so SMTP failures are visible and the user can retry.
+            $this->sendVerificationEmail($cleanEmail, $cleanName, $verificationToken);
 
             return [
                 'success' => true,
@@ -208,8 +199,19 @@ class AuthService {
             throw new Exception("This verification link has expired. Please register again to receive a new link.");
         }
 
-        $upd = $this->db->prepare("UPDATE users SET email_verified = 1, email_verified_at = CURRENT_TIMESTAMP, email_verification_token = NULL, email_verification_expires_at = NULL WHERE id = :id");
-        $upd->execute([':id' => $user['id']]);
+        $this->db->beginTransaction();
+        try {
+            $upd = $this->db->prepare("UPDATE users SET email_verified = 1, email_verified_at = CURRENT_TIMESTAMP, email_verification_token = NULL, email_verification_expires_at = NULL WHERE id = :id AND email_verified = 0");
+            $upd->execute([':id' => $user['id']]);
+
+            (new ReferralService($this->db))->activateVerifiedReferral((int)$user['id']);
+            $this->db->commit();
+        } catch (Exception $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            throw $e;
+        }
 
         return [
             'success' => true,
@@ -219,6 +221,36 @@ class AuthService {
                 'email' => $user['email'],
             ]
         ];
+    }
+
+    public function resendVerificationEmail(string $email): void {
+        $cleanEmail = strtolower(trim($email));
+        if (!filter_var($cleanEmail, FILTER_VALIDATE_EMAIL)) {
+            throw new Exception('Please provide a valid email address.');
+        }
+
+        $user = $this->getUserByEmail($cleanEmail);
+        if (!$user) {
+            throw new Exception('No account was found for this email address.');
+        }
+        if ((int)($user['email_verified'] ?? 0) === 1) {
+            throw new Exception('This email address is already verified. You can sign in.');
+        }
+
+        $token = $this->generateSecureToken();
+        $expiresAt = date('Y-m-d H:i:s', time() + 86400);
+        $stmt = $this->db->prepare("
+            UPDATE users
+            SET email_verification_token = :token, email_verification_expires_at = :expires
+            WHERE id = :id AND email_verified = 0
+        ");
+        $stmt->execute([
+            ':token' => $token,
+            ':expires' => $expiresAt,
+            ':id' => $user['id']
+        ]);
+
+        $this->sendVerificationEmail($cleanEmail, (string)$user['name'], $token);
     }
 
     public function requestPasswordReset(string $email): array {
@@ -241,7 +273,7 @@ class AuthService {
             ':id' => $user['id'],
         ]);
 
-        $baseUrl = rtrim((string)($_SERVER['APP_URL'] ?? ((isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ? 'https://' : 'http://') . ($_SERVER['HTTP_HOST'] ?? '127.0.0.1:8000')), '/');
+        $baseUrl = rtrim((string)(getenv('APP_URL') ?: ((isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ? 'https://' : 'http://') . ($_SERVER['HTTP_HOST'] ?? '127.0.0.1:8000')), '/');
         $resetLink = $baseUrl . '/reset-password?token=' . urlencode($token);
         $this->sendEmail(
             $cleanEmail,
@@ -410,19 +442,32 @@ class AuthService {
     }
 
     private function sendEmail(string $toEmail, string $toName, string $subject, string $body, ?string $fallbackLink = null, array $emailTemplate = []): void {
-        $smtpHost = getenv('APP_SMTP_HOST') ?: 'smtp.gmail.com';
-        $smtpUsername = getenv('APP_SMTP_USERNAME') ?: '';
-        $smtpPassword = getenv('APP_SMTP_PASSWORD') ?: '';
-        $smtpPort = (int)(getenv('APP_SMTP_PORT') ?: 587);
-        $smtpSecure = getenv('APP_SMTP_SECURE') ?: 'tls';
+        $smtpHost = trim((string)(getenv('APP_SMTP_HOST') ?: 'smtp.gmail.com'), " \t\n\r\0\x0B\"'");
+        $smtpUsername = trim((string)(getenv('APP_SMTP_USERNAME') ?: ''), " \t\n\r\0\x0B\"'");
+        $smtpPassword = trim((string)(getenv('APP_SMTP_PASSWORD') ?: ''), " \t\n\r\0\x0B\"'");
+        $smtpPort = (int)trim((string)(getenv('APP_SMTP_PORT') ?: 587), " \t\n\r\0\x0B\"'");
+        $smtpSecure = strtolower(trim((string)(getenv('APP_SMTP_SECURE') ?: 'tls'), " \t\n\r\0\x0B\"'"));
 
-        if ($smtpUsername !== '' && $smtpPassword !== '') {
-            $html = $this->buildHtmlEmailTemplate($toName, $subject, $emailTemplate['heading'] ?? 'Action required', $emailTemplate['subtitle'] ?? '', $emailTemplate['primaryText'] ?? $body, $fallbackLink ?? '', $emailTemplate['ctaText'] ?? 'Continue');
-            $this->sendViaSmtp($smtpHost, $smtpUsername, $smtpPassword, $smtpPort, $smtpSecure, $toEmail, $toName, $subject, $body, $html);
-            return;
+        if ($smtpUsername === '' || $smtpPassword === '') {
+            throw new Exception('SMTP is not configured. Set APP_SMTP_USERNAME and APP_SMTP_PASSWORD.');
         }
 
-        error_log('SMTP email not configured. Email for ' . $toEmail . ' would use this link: ' . ($fallbackLink ?? 'n/a'));
+        $html = $this->buildHtmlEmailTemplate($toName, $subject, $emailTemplate['heading'] ?? 'Action required', $emailTemplate['subtitle'] ?? '', $emailTemplate['primaryText'] ?? $body, $fallbackLink ?? '', $emailTemplate['ctaText'] ?? 'Continue');
+        $lastError = null;
+        for ($attempt = 1; $attempt <= 3; $attempt++) {
+            try {
+                $this->sendViaSmtp($smtpHost, $smtpUsername, $smtpPassword, $smtpPort, $smtpSecure, $toEmail, $toName, $subject, $body, $html);
+                error_log('Verification email accepted by SMTP for recipient domain: ' . (str_contains($toEmail, '@') ? substr(strrchr($toEmail, '@'), 1) : 'unknown'));
+                return;
+            } catch (Exception $e) {
+                $lastError = $e;
+                if ($attempt < 3) {
+                    usleep(500000);
+                }
+            }
+        }
+
+        throw new Exception('SMTP delivery failed after 3 attempts: ' . ($lastError?->getMessage() ?? 'unknown error'));
     }
 
     private function buildHtmlEmailTemplate(string $toName, string $subject, string $heading, string $subtitle, string $primaryText, string $ctaLink, string $ctaText): string {
@@ -461,48 +506,51 @@ class AuthService {
     }
 
     private function sendViaSmtp(string $host, string $username, string $password, int $port, string $secure, string $toEmail, string $toName, string $subject, string $body, ?string $htmlBody = null): void {
-        $smtp = fsockopen($host, $port, $errno, $errstr, 5);
+        $smtp = fsockopen($host, $port, $errno, $errstr, 20);
         if (!$smtp) {
-            error_log('SMTP connect failed: ' . $errstr . ' (' . $errno . ')');
-            return;
+            throw new Exception('SMTP connect failed: ' . $errstr . ' (' . $errno . ')');
         }
 
-        stream_set_timeout($smtp, 5);
-        $this->smtpRead($smtp, '220');
+        try {
+            stream_set_timeout($smtp, 5);
+            $this->smtpRead($smtp, '220');
 
-        $this->smtpCommand($smtp, 'EHLO ' . $host);
-        if (strtolower($secure) === 'tls') {
-            $this->smtpCommand($smtp, 'STARTTLS');
-            stream_socket_enable_crypto($smtp, true, STREAM_CRYPTO_METHOD_TLS_CLIENT);
             $this->smtpCommand($smtp, 'EHLO ' . $host);
+            if (strtolower($secure) === 'tls') {
+                $this->smtpCommand($smtp, 'STARTTLS');
+                if (stream_socket_enable_crypto($smtp, true, STREAM_CRYPTO_METHOD_TLS_CLIENT) !== true) {
+                    throw new Exception('SMTP TLS negotiation failed.');
+                }
+                $this->smtpCommand($smtp, 'EHLO ' . $host);
+            }
+            $this->smtpCommand($smtp, 'AUTH LOGIN');
+            $this->smtpCommand($smtp, base64_encode($username));
+            $this->smtpCommand($smtp, base64_encode($password));
+
+            $fromEmail = $username;
+            $this->smtpCommand($smtp, 'MAIL FROM:<' . $fromEmail . '>');
+            $this->smtpCommand($smtp, 'RCPT TO:<' . $toEmail . '>');
+            $this->smtpCommand($smtp, 'DATA');
+
+            $message = "From: CapitalNest Nepal <{$fromEmail}>\r\n" .
+                "To: {$toName} <{$toEmail}>\r\n" .
+                "Subject: {$subject}\r\n" .
+                "MIME-Version: 1.0\r\n" .
+                "Content-Type: multipart/alternative; boundary=\"cn_boundary\"\r\n\r\n" .
+                "--cn_boundary\r\n" .
+                "Content-Type: text/plain; charset=UTF-8\r\n\r\n" .
+                $body . "\r\n\r\n" .
+                "--cn_boundary\r\n" .
+                "Content-Type: text/html; charset=UTF-8\r\n\r\n" .
+                ($htmlBody ?? $body) . "\r\n\r\n" .
+                "--cn_boundary--\r\n.";
+
+            fwrite($smtp, $message . "\r\n");
+            $this->smtpRead($smtp, '250');
+            $this->smtpCommand($smtp, 'QUIT');
+        } finally {
+            fclose($smtp);
         }
-
-        $this->smtpCommand($smtp, 'AUTH LOGIN');
-        $this->smtpCommand($smtp, base64_encode($username));
-        $this->smtpCommand($smtp, base64_encode($password));
-
-        $fromEmail = $username;
-        $this->smtpCommand($smtp, 'MAIL FROM:<' . $fromEmail . '>');
-        $this->smtpCommand($smtp, 'RCPT TO:<' . $toEmail . '>');
-        $this->smtpCommand($smtp, 'DATA');
-
-        $message = "From: CapitalNest Nepal <{$fromEmail}>\r\n" .
-            "To: {$toName} <{$toEmail}>\r\n" .
-            "Subject: {$subject}\r\n" .
-            "MIME-Version: 1.0\r\n" .
-            "Content-Type: multipart/alternative; boundary=\"cn_boundary\"\r\n\r\n" .
-            "--cn_boundary\r\n" .
-            "Content-Type: text/plain; charset=UTF-8\r\n\r\n" .
-            $body . "\r\n\r\n" .
-            "--cn_boundary\r\n" .
-            "Content-Type: text/html; charset=UTF-8\r\n\r\n" .
-            ($htmlBody ?? $body) . "\r\n\r\n" .
-            "--cn_boundary--\r\n.";
-
-        fwrite($smtp, $message . "\r\n");
-        $this->smtpRead($smtp, '250');
-        $this->smtpCommand($smtp, 'QUIT');
-        fclose($smtp);
     }
 
     private function smtpCommand($socket, string $command): void {

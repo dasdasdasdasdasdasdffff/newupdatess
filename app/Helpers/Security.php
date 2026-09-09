@@ -13,10 +13,10 @@ class Security {
             $cookieParams = session_get_cookie_params();
             $isSecureRequest = (
                 (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ||
-                ((($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https') ||
-                ((($_SERVER['HTTP_X_FORWARDED_SSL'] ?? '') === 'on')) ||
-                ((($_SERVER['HTTP_CF_VISITOR'] ?? '') !== '') && str_contains((string)$_SERVER['HTTP_CF_VISITOR'], 'https')) ||
-                ((($_SERVER['SERVER_PORT'] ?? '') === '443'))
+                (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https') ||
+                (($_SERVER['HTTP_X_FORWARDED_SSL'] ?? '') === 'on') ||
+                (($_SERVER['HTTP_CF_VISITOR'] ?? '') !== '' && str_contains((string)$_SERVER['HTTP_CF_VISITOR'], 'https')) ||
+                (($_SERVER['SERVER_PORT'] ?? '') === '443')
             );
 
             session_set_cookie_params([

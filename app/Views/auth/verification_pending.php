@@ -22,6 +22,12 @@
             <p class="mt-3 text-sm text-[#6B7280]">
                 We have sent a verification link to <span class="font-semibold text-[#111827]"><?= htmlspecialchars($email ?? '') ?></span>.
             </p>
+            <?php if (!empty($success)): ?>
+                <p class="mt-4 rounded-lg bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700"><?= htmlspecialchars($success) ?></p>
+            <?php endif; ?>
+            <?php if (!empty($error)): ?>
+                <p class="mt-4 rounded-lg bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700"><?= htmlspecialchars($error) ?></p>
+            <?php endif; ?>
 
             <div class="mt-6 rounded-xl border border-[#F3E8C6] bg-[#FEF9EE] p-4 text-left text-xs text-[#6B7280]">
                 <p class="font-semibold text-[#111827] mb-2">Next steps:</p>
@@ -40,6 +46,11 @@
                     Use a different email
                 </a>
             </div>
+            <?php if (!empty($email)): ?>
+                <a href="/resend-verification?email=<?= urlencode($email) ?>" class="mt-5 inline-block text-xs font-semibold text-[#C59B27] hover:underline">
+                    Resend verification email
+                </a>
+            <?php endif; ?>
         </div>
     </div>
 

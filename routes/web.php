@@ -28,6 +28,7 @@ return [
     'GET /register' => [AuthController::class, 'showRegister'],
     'POST /register' => [AuthController::class, 'processRegister'],
     'GET /register/pending' => [AuthController::class, 'showPendingVerification'],
+    'GET /resend-verification' => [AuthController::class, 'resendVerification'],
     'GET /verify-email' => [AuthController::class, 'verifyEmail'],
     'GET /forgot-password' => [AuthController::class, 'showForgotPassword'],
     'POST /forgot-password' => [AuthController::class, 'processForgotPassword'],
