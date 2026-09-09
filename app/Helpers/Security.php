@@ -11,11 +11,19 @@ class Security {
     public static function startSecureSession(): void {
         if (session_status() === PHP_SESSION_NONE) {
             $cookieParams = session_get_cookie_params();
+            $isSecureRequest = (
+                (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ||
+                ((($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https') ||
+                ((($_SERVER['HTTP_X_FORWARDED_SSL'] ?? '') === 'on')) ||
+                ((($_SERVER['HTTP_CF_VISITOR'] ?? '') !== '') && str_contains((string)$_SERVER['HTTP_CF_VISITOR'], 'https')) ||
+                ((($_SERVER['SERVER_PORT'] ?? '') === '443'))
+            );
+
             session_set_cookie_params([
                 'lifetime' => 86400 * 7,
                 'path' => '/',
                 'domain' => $cookieParams['domain'] ?? '',
-                'secure' => isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on',
+                'secure' => $isSecureRequest,
                 'httponly' => true,
                 'samesite' => 'Lax'
             ]);
