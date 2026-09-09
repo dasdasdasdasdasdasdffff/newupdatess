@@ -178,7 +178,12 @@ class ReferralService {
             SELECT r.*, u.name as referee_name
             FROM referrals r
             JOIN users u ON r.referred_user_id = u.id
-            WHERE r.referred_user_id = :uid AND r.status = 'pending'
+            WHERE r.referred_user_id = :uid
+              AND r.status IN ('pending', 'rewarded')
+              AND NOT EXISTS (
+                  SELECT 1 FROM referral_earnings re
+                  WHERE re.referral_id = r.id
+              )
             LIMIT 1
         ");
         $stmt->execute([':uid' => $refereeUserId]);
@@ -247,7 +252,7 @@ class ReferralService {
             SELECT r.*, u.name, u.email, u.name as referred_name, u.email as referred_email, u.created_at as joined_at
             FROM referrals r
             JOIN users u ON r.referred_user_id = u.id
-            WHERE r.referrer_id = :uid AND u.email_verified = 1
+            WHERE r.referrer_id = :uid
             ORDER BY r.id DESC
         ");
         $listStmt->execute([':uid' => $userId]);
@@ -272,7 +277,21 @@ class ReferralService {
             'total_earnings' => $totalEarned,
             'history' => $referrals,
             'referrals' => $referrals,
-            'earnings' => []
+            'earnings' => $this->getUserReferralEarnings($userId)
         ];
+    }
+
+    private function getUserReferralEarnings(int $userId): array {
+        $stmt = $this->db->prepare("
+            SELECT re.*, u.name as from_user_name, i.amount as investment_amount,
+                   re.amount as commission_amount
+            FROM referral_earnings re
+            JOIN users u ON re.from_user_id = u.id
+            LEFT JOIN investments i ON re.investment_id = i.id
+            WHERE re.user_id = :uid
+            ORDER BY re.id DESC
+        ");
+        $stmt->execute([':uid' => $userId]);
+        return $stmt->fetchAll();
     }
 }

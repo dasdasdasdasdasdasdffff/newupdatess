@@ -549,10 +549,15 @@ class AdminController {
         ")->fetchAll();
 
         $earnings = $this->db->query("
-            SELECT re.*, u.name as beneficiary_name, ref.name as source_user_name
+            SELECT re.*, re.user_id as referrer_id,
+                   u.name as referrer_name, u.email as referrer_email,
+                   ref.id as referred_id, ref.name as referred_name, ref.email as referred_email,
+                   inv.amount as investment_amount,
+                   re.amount as commission_amount
             FROM referral_earnings re
             JOIN users u ON re.user_id = u.id
             JOIN users ref ON re.from_user_id = ref.id
+            LEFT JOIN investments inv ON re.investment_id = inv.id
             ORDER BY re.id DESC LIMIT 50
         ")->fetchAll();
 

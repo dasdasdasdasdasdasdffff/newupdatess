@@ -101,6 +101,7 @@ class Database {
             if ($hasUsersTable) {
                 self::ensureMysqlSessionTable($pdo);
                 self::ensureMysqlColumns($pdo);
+                self::backfillMysqlReferrals($pdo);
                 return;
             }
 
@@ -110,6 +111,7 @@ class Database {
             }
             self::ensureMysqlSessionTable($pdo);
             self::ensureMysqlColumns($pdo);
+            self::backfillMysqlReferrals($pdo);
             return;
         }
 
@@ -160,6 +162,35 @@ class Database {
                 }
             }
         }
+    }
+
+    /**
+     * Recover referral rows for accounts created before referral binding was enabled.
+     * The unique pair constraint keeps this migration safe to run on every request.
+     */
+    private static function backfillMysqlReferrals(PDO $pdo): void {
+        $tables = $pdo->query("
+            SELECT table_name
+            FROM information_schema.tables
+            WHERE table_schema = DATABASE()
+              AND table_name IN ('users', 'referrals')
+        ")->fetchAll(PDO::FETCH_COLUMN);
+        if (count($tables) !== 2) {
+            return;
+        }
+
+        $pdo->exec("
+            INSERT IGNORE INTO referrals (referrer_id, referred_user_id, referral_code, status, reward_amount, created_at)
+            SELECT referrer.id, referred.id, referred.referred_by, 'pending', 0.00, referred.created_at
+            FROM users referred
+            JOIN users referrer ON UPPER(referrer.referral_code) = UPPER(referred.referred_by)
+            LEFT JOIN referrals existing
+                ON existing.referrer_id = referrer.id
+               AND existing.referred_user_id = referred.id
+            WHERE referred.referred_by IS NOT NULL
+              AND TRIM(referred.referred_by) <> ''
+              AND existing.id IS NULL
+        ");
     }
 
     private static function bootstrapSqlite(PDO $pdo): void {
