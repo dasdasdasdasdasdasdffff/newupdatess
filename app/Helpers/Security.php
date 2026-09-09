@@ -38,15 +38,30 @@ class Security {
         if (empty($_SESSION['_csrf_token'])) {
             $_SESSION['_csrf_token'] = bin2hex(random_bytes(32));
         }
-        return $_SESSION['_csrf_token'];
+        $token = (string)$_SESSION['_csrf_token'];
+        $isSecureRequest = (
+            (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ||
+            (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https')
+        );
+        setcookie('XSRF-TOKEN', $token, [
+            'expires' => time() + (86400 * 7),
+            'path' => '/',
+            'secure' => $isSecureRequest,
+            'httponly' => false,
+            'samesite' => 'Lax',
+        ]);
+        return $token;
     }
 
     public static function validateCsrfToken(?string $token): bool {
         self::startSecureSession();
-        if (empty($_SESSION['_csrf_token']) || empty($token)) {
+        if (empty($token)) {
             return false;
         }
-        return hash_equals($_SESSION['_csrf_token'], $token);
+        $sessionToken = (string)($_SESSION['_csrf_token'] ?? '');
+        $cookieToken = (string)($_COOKIE['XSRF-TOKEN'] ?? '');
+        return ($sessionToken !== '' && hash_equals($sessionToken, $token))
+            || ($cookieToken !== '' && hash_equals($cookieToken, $token));
     }
 
     public static function csrfInput(): string {
