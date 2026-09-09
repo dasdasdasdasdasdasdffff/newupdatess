@@ -48,7 +48,7 @@
                 <div>
                     <label for="email" class="block text-xs font-semibold text-[#111827]">Email Address</label>
                     <div class="mt-1.5 relative">
-                        <input id="email" name="email" type="email" autocomplete="email" required
+                        <input id="email" name="email" type="email" autocomplete="username" required
                             class="block w-full px-3.5 py-2.5 bg-white border border-[#E5E7EB] rounded-xl text-sm placeholder-[#9CA3AF] focus:outline-none focus:border-[#C59B27] focus:ring-1 focus:ring-[#C59B27] transition"
                             placeholder="name@capitalnest.np">
                     </div>
@@ -57,7 +57,7 @@
                 <div>
                     <label for="password" class="block text-xs font-semibold text-[#111827]">Account Password</label>
                     <div class="mt-1.5 relative">
-                        <input id="password" name="password" type="password" required
+                        <input id="password" name="password" type="password" autocomplete="current-password" required
                             class="block w-full px-3.5 py-2.5 bg-white border border-[#E5E7EB] rounded-xl text-sm placeholder-[#9CA3AF] focus:outline-none focus:border-[#C59B27] focus:ring-1 focus:ring-[#C59B27] transition"
                             placeholder="&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;">
                     </div>
