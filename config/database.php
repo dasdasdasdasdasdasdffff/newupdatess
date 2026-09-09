@@ -21,7 +21,7 @@ class Database {
         }
 
         $databaseUrl = getenv('DATABASE_URL') ?: getenv('MYSQL_URL') ?: getenv('CLEARDB_DATABASE_URL') ?: null;
-        $connectionType = getenv('DB_CONNECTION') ?: 'mysql';
+        $connectionType = getenv('DB_CONNECTION') ?: ($databaseUrl ? 'mysql' : 'sqlite');
 
         if ($databaseUrl && !getenv('DB_HOST') && !getenv('MYSQLHOST')) {
             $parsed = parse_url((string)$databaseUrl);
@@ -55,7 +55,7 @@ class Database {
                 self::ensureDatabaseReady(self::$instance);
             } else {
                 // Portable SQLite fallback for local verification
-                $sqlitePath = dirname(__DIR__) . '/storage/database.sqlite';
+                $sqlitePath = self::getSqlitePath();
                 $dsn = "sqlite:{$sqlitePath}";
                 self::$instance = new PDO($dsn, null, null, [
                     PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
@@ -66,11 +66,13 @@ class Database {
         } catch (PDOException $e) {
             // If MySQL is not locally reachable (e.g. during standalone container builds), fallback gracefully to SQLite
             try {
-                $sqliteDir = dirname(__DIR__) . '/storage';
+                $sqlitePath = self::getSqlitePath();
+                $sqliteDir = dirname($sqlitePath);
                 if (!is_dir($sqliteDir)) {
-                    @mkdir($sqliteDir, 0755, true);
+                    if (!mkdir($sqliteDir, 0755, true) && !is_dir($sqliteDir)) {
+                        throw new Exception("Unable to create SQLite storage directory: {$sqliteDir}");
+                    }
                 }
-                $sqlitePath = $sqliteDir . '/database.sqlite';
                 self::$instance = new PDO("sqlite:{$sqlitePath}", null, null, [
                     PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
                     PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC
@@ -91,6 +93,7 @@ class Database {
         if ($driver === 'mysql') {
             $hasUsersTable = $pdo->query("SELECT 1 FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'users' LIMIT 1")->fetchColumn();
             if ($hasUsersTable) {
+                self::ensureMysqlSessionTable($pdo);
                 self::ensureMysqlColumns($pdo);
                 return;
             }
@@ -99,6 +102,7 @@ class Database {
             if (file_exists($seedFile)) {
                 require_once $seedFile;
             }
+            self::ensureMysqlSessionTable($pdo);
             self::ensureMysqlColumns($pdo);
             return;
         }
@@ -157,7 +161,25 @@ class Database {
         self::ensureSqliteColumns($pdo);
     }
 
+    private static function getSqlitePath(): string {
+        $configuredPath = trim((string)(getenv('DB_SQLITE_PATH') ?: ''));
+        if ($configuredPath !== '') {
+            return $configuredPath;
+        }
+
+        return dirname(__DIR__) . '/storage/database.sqlite';
+    }
+
     private static function ensureSqliteColumns(PDO $pdo): void {
+        $pdo->exec("CREATE TABLE IF NOT EXISTS sessions (
+            id TEXT PRIMARY KEY,
+            user_id INTEGER NULL,
+            ip_address TEXT NULL,
+            user_agent TEXT NULL,
+            payload TEXT NOT NULL,
+            last_activity INTEGER NOT NULL
+        )");
+
         $tables = [
             'users' => [
                 'email_verified' => 'INTEGER DEFAULT 0',
@@ -283,6 +305,19 @@ class Database {
                     $pdo->exec("UPDATE {$table} SET reviewed_at = verified_at WHERE reviewed_at IS NULL AND verified_at IS NOT NULL");
                 }
             }
+
         }
+    }
+
+    private static function ensureMysqlSessionTable(PDO $pdo): void {
+        $pdo->exec("CREATE TABLE IF NOT EXISTS sessions (
+            id VARCHAR(128) NOT NULL PRIMARY KEY,
+            user_id BIGINT UNSIGNED NULL,
+            ip_address VARCHAR(45) NULL,
+            user_agent TEXT NULL,
+            payload LONGTEXT NOT NULL,
+            last_activity INT UNSIGNED NOT NULL,
+            INDEX idx_sessions_last_activity (last_activity)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     }
 }

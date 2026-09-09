@@ -7,11 +7,16 @@ declare(strict_types=1);
 
 namespace App\Helpers;
 
+use Config\Database;
+
 class Security {
+    private static bool $sessionHandlerRegistered = false;
+
     public static function startSecureSession(): void {
         if (session_status() === PHP_SESSION_NONE) {
             ini_set('session.use_only_cookies', '1');
             ini_set('session.use_strict_mode', '1');
+            ini_set('session.gc_maxlifetime', (string)(86400 * 7));
             $cookieParams = session_get_cookie_params();
             $isSecureRequest = (
                 (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ||
@@ -29,6 +34,12 @@ class Security {
                 'httponly' => true,
                 'samesite' => 'Lax'
             ]);
+
+            if ((getenv('SESSION_DRIVER') ?: 'database') === 'database' && !self::$sessionHandlerRegistered) {
+                session_set_save_handler(new DatabaseSessionHandler(Database::getConnection()), true);
+                self::$sessionHandlerRegistered = true;
+            }
+
             session_start();
         }
     }

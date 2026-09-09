@@ -260,6 +260,14 @@ function runMigrationAndSeed(): void {
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 updated_at TEXT NOT NULL DEFAULT (datetime('now'))
             )",
+            "CREATE TABLE IF NOT EXISTS sessions (
+                id TEXT PRIMARY KEY,
+                user_id INTEGER NULL,
+                ip_address TEXT NULL,
+                user_agent TEXT NULL,
+                payload TEXT NOT NULL,
+                last_activity INTEGER NOT NULL
+            )",
             "CREATE TABLE IF NOT EXISTS admin_activity_logs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 admin_id INTEGER NOT NULL,

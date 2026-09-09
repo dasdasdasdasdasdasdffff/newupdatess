@@ -21,7 +21,7 @@ let phpProcess: ChildProcess | null = null;
 function startPhpServer() {
   phpProcess = spawn('php', ['-S', `127.0.0.1:${PHP_PORT}`, '-t', 'public', 'public/index.php'], {
     stdio: 'inherit',
-    env: { ...process.env, DB_CONNECTION: process.env.DB_CONNECTION || 'mysql' }
+    env: { ...process.env }
   });
 
   phpProcess.on('exit', (code, signal) => {
