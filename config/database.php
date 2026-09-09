@@ -91,6 +91,7 @@ class Database {
         if ($driver === 'mysql') {
             $hasUsersTable = $pdo->query("SELECT 1 FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'users' LIMIT 1")->fetchColumn();
             if ($hasUsersTable) {
+                self::ensureMysqlColumns($pdo);
                 return;
             }
 
@@ -98,10 +99,50 @@ class Database {
             if (file_exists($seedFile)) {
                 require_once $seedFile;
             }
+            self::ensureMysqlColumns($pdo);
             return;
         }
 
         self::bootstrapSqlite($pdo);
+    }
+
+    private static function ensureMysqlColumns(PDO $pdo): void {
+        $columns = [
+            'deposits' => [
+                'net_amount' => "DECIMAL(18, 2) NOT NULL DEFAULT '0.00' AFTER fee",
+                'transaction_id' => 'VARCHAR(100) NULL DEFAULT NULL AFTER net_amount',
+                'processed_by' => 'BIGINT UNSIGNED NULL DEFAULT NULL AFTER reviewed_by',
+                'processed_at' => 'DATETIME NULL DEFAULT NULL AFTER processed_by',
+            ],
+        ];
+
+        foreach ($columns as $table => $tableColumns) {
+            $tableExists = $pdo->prepare(
+                "SELECT 1 FROM information_schema.tables
+                 WHERE table_schema = DATABASE() AND table_name = :table LIMIT 1"
+            );
+            $tableExists->execute([':table' => $table]);
+            if (!$tableExists->fetchColumn()) {
+                continue;
+            }
+
+            $existing = $pdo->prepare(
+                "SELECT column_name FROM information_schema.columns
+                 WHERE table_schema = DATABASE() AND table_name = :table"
+            );
+            $existing->execute([':table' => $table]);
+            $existingColumns = array_map(
+                static fn(array $row): string => (string)$row['column_name'],
+                $existing->fetchAll()
+            );
+
+            foreach ($tableColumns as $column => $definition) {
+                if (in_array($column, $existingColumns, true)) {
+                    continue;
+                }
+                $pdo->exec("ALTER TABLE `{$table}` ADD COLUMN `{$column}` {$definition}");
+            }
+        }
     }
 
     private static function bootstrapSqlite(PDO $pdo): void {
