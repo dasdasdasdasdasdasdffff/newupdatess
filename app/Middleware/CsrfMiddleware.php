@@ -13,7 +13,9 @@ class CsrfMiddleware {
     public static function handle(): void {
         $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
         if (in_array($method, ['POST', 'PUT', 'PATCH', 'DELETE'], true)) {
-            $token = $_POST['_csrf_token'] ?? ($_SERVER['HTTP_X_CSRF_TOKEN'] ?? null);
+            $token = $_POST['_csrf_token']
+                ?? $_POST['csrf_token']
+                ?? ($_SERVER['HTTP_X_CSRF_TOKEN'] ?? null);
             if (!Security::validateCsrfToken($token)) {
                 if (isset($_SERVER['HTTP_ACCEPT']) && str_contains($_SERVER['HTTP_ACCEPT'], 'application/json')) {
                     Security::jsonResponse(['error' => 'Security validation token mismatch. Please refresh and try again.'], 403);
