@@ -476,7 +476,7 @@ class AdminController {
             $stmt = $this->db->prepare("
                 UPDATE investment_plans 
                 SET name = :name, min_investment = :min, max_investment = :max, return_rate = :rate,
-                    duration_days = :dur, payout_frequency = :payout, status = :status, description = :desc, updated_at = datetime('now')
+                    duration_days = :dur, payout_frequency = :payout, status = :status, description = :desc, updated_at = CURRENT_TIMESTAMP
                 WHERE id = :id
             ");
             $stmt->execute([
@@ -487,7 +487,7 @@ class AdminController {
         } else {
             $stmt = $this->db->prepare("
                 INSERT INTO investment_plans (name, slug, min_investment, max_investment, return_rate, duration_days, payout_frequency, status, description, created_at)
-                VALUES (:name, :slug, :min, :max, :rate, :dur, :payout, :status, :desc, datetime('now'))
+                VALUES (:name, :slug, :min, :max, :rate, :dur, :payout, :status, :desc, CURRENT_TIMESTAMP)
             ");
             $stmt->execute([
                 ':name' => $name, ':slug' => $slug, ':min' => $min, ':max' => $max, ':rate' => $rate,
@@ -593,7 +593,7 @@ class AdminController {
             $users = $this->db->query("SELECT id FROM users WHERE status = 'active'")->fetchAll();
             $stmt = $this->db->prepare("
                 INSERT INTO notifications (user_id, title, message, type, is_read, created_at)
-                VALUES (:uid, :title, :message, :type, 0, datetime('now'))
+                VALUES (:uid, :title, :message, :type, 0, CURRENT_TIMESTAMP)
             ");
             foreach ($users as $u) {
                 $stmt->execute([
@@ -606,7 +606,7 @@ class AdminController {
         } else {
             $stmt = $this->db->prepare("
                 INSERT INTO notifications (user_id, title, message, type, is_read, created_at)
-                VALUES (:uid, :title, :message, :type, 0, datetime('now'))
+                VALUES (:uid, :title, :message, :type, 0, CURRENT_TIMESTAMP)
             ");
             $stmt->execute([
                 ':uid' => $userId,
@@ -665,10 +665,10 @@ class AdminController {
         if (!empty($message)) {
             $stmt = $this->db->prepare("
                 INSERT INTO support_messages (ticket_id, sender_type, sender_id, message, created_at)
-                VALUES (:tid, 'admin', :aid, :msg, datetime('now'))
+                VALUES (:tid, 'admin', :aid, :msg, CURRENT_TIMESTAMP)
             ");
             $stmt->execute([':tid' => $ticketId, ':aid' => $admin['id'], ':msg' => Security::sanitize($message)]);
-            $this->db->prepare("UPDATE support_tickets SET status = :st, updated_at = datetime('now') WHERE id = :id")->execute([':st' => $status, ':id' => $ticketId]);
+            $this->db->prepare("UPDATE support_tickets SET status = :st, updated_at = CURRENT_TIMESTAMP WHERE id = :id")->execute([':st' => $status, ':id' => $ticketId]);
         }
 
         header("Location: /admin/support/view?id={$ticketId}&success=" . urlencode('Response posted.'));
@@ -773,12 +773,12 @@ class AdminController {
         $existing->execute([':k' => $key]);
 
         if ($existing->fetch()) {
-            $stmt = $this->db->prepare("UPDATE settings SET setting_value = :val, updated_at = datetime('now') WHERE setting_key = :k");
+            $stmt = $this->db->prepare("UPDATE settings SET setting_value = :val, updated_at = CURRENT_TIMESTAMP WHERE setting_key = :k");
             $stmt->execute([':val' => $value, ':k' => $key]);
             return;
         }
 
-        $insert = $this->db->prepare("INSERT INTO settings (setting_key, setting_value, description, category, updated_at) VALUES (:k, :val, '', 'general', datetime('now'))");
+        $insert = $this->db->prepare("INSERT INTO settings (setting_key, setting_value, description, category, updated_at) VALUES (:k, :val, '', 'general', CURRENT_TIMESTAMP)");
         $insert->execute([':k' => $key, ':val' => $value]);
     }
 
@@ -808,7 +808,7 @@ class AdminController {
     private function logActivity(int $adminId, string $action, string $targetType, string $targetId, array $details): void {
         $stmt = $this->db->prepare("
             INSERT INTO admin_activity_logs (admin_id, action, target_type, target_id, details, ip_address, created_at)
-            VALUES (:admin_id, :action, :type, :id, :details, :ip, datetime('now'))
+            VALUES (:admin_id, :action, :type, :id, :details, :ip, CURRENT_TIMESTAMP)
         ");
         $stmt->execute([
             ':admin_id' => $adminId,

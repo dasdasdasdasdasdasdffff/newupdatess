@@ -54,7 +54,7 @@ class SupportController {
         try {
             $tStmt = $this->db->prepare("
                 INSERT INTO support_tickets (ticket_ref, user_id, subject, category, priority, status, created_at)
-                VALUES (:ref, :uid, :sub, :cat, :pri, 'open', datetime('now'))
+                VALUES (:ref, :uid, :sub, :cat, :pri, 'open', CURRENT_TIMESTAMP)
             ");
             $tStmt->execute([
                 ':ref' => $ticketRef,
@@ -67,7 +67,7 @@ class SupportController {
 
             $mStmt = $this->db->prepare("
                 INSERT INTO support_messages (ticket_id, sender_type, sender_id, message, created_at)
-                VALUES (:tid, 'user', :uid, :msg, datetime('now'))
+                VALUES (:tid, 'user', :uid, :msg, CURRENT_TIMESTAMP)
             ");
             $mStmt->execute([
                 ':tid' => $ticketId,
@@ -114,10 +114,10 @@ class SupportController {
         if (!empty($message)) {
             $stmt = $this->db->prepare("
                 INSERT INTO support_messages (ticket_id, sender_type, sender_id, message, created_at)
-                VALUES (:tid, 'user', :uid, :msg, datetime('now'))
+                VALUES (:tid, 'user', :uid, :msg, CURRENT_TIMESTAMP)
             ");
             $stmt->execute([':tid' => $ticketId, ':uid' => $userId, ':msg' => Security::sanitize($message)]);
-            $this->db->prepare("UPDATE support_tickets SET updated_at = datetime('now') WHERE id = :id")->execute([':id' => $ticketId]);
+            $this->db->prepare("UPDATE support_tickets SET updated_at = CURRENT_TIMESTAMP WHERE id = :id")->execute([':id' => $ticketId]);
         }
         header("Location: /support/view?id={$ticketId}");
         exit;

@@ -61,9 +61,10 @@ class AuthService {
         $this->db->beginTransaction();
         try {
             // 1. Insert User
+            $expiresAt = date('Y-m-d H:i:s', time() + 86400);
             $uStmt = $this->db->prepare("
                 INSERT INTO users (referral_code, referred_by, name, email, phone, password_hash, email_verified, email_verification_token, email_verification_expires_at, status, registration_ip, last_seen_ip, device_fingerprint, created_at)
-                VALUES (:ref_code, :referred_by, :name, :email, :phone, :hash, 0, :verify_token, datetime('now', '+1 day'), 'active', :registration_ip, :last_seen_ip, :device_fingerprint, datetime('now'))
+                VALUES (:ref_code, :referred_by, :name, :email, :phone, :hash, 0, :verify_token, :expires_at, 'active', :registration_ip, :last_seen_ip, :device_fingerprint, CURRENT_TIMESTAMP)
             ");
             $uStmt->execute([
                 ':ref_code' => $userRefCode,
@@ -73,6 +74,7 @@ class AuthService {
                 ':phone' => Security::sanitize($cleanPhone),
                 ':hash' => $passwordHash,
                 ':verify_token' => $verificationToken,
+                ':expires_at' => $expiresAt,
                 ':registration_ip' => $clientIp,
                 ':last_seen_ip' => $clientIp,
                 ':device_fingerprint' => $deviceFingerprint,
@@ -80,13 +82,13 @@ class AuthService {
             $userId = (int)$this->db->lastInsertId();
 
             // 2. Initialize Profile
-            $pStmt = $this->db->prepare("INSERT INTO user_profiles (user_id, created_at) VALUES (:uid, datetime('now'))");
+            $pStmt = $this->db->prepare("INSERT INTO user_profiles (user_id, created_at) VALUES (:uid, CURRENT_TIMESTAMP)");
             $pStmt->execute([':uid' => $userId]);
 
             // 3. Initialize Wallet
             $wStmt = $this->db->prepare("
                 INSERT INTO wallets (user_id, available_balance, invested_balance, total_earnings, total_deposits, total_withdrawals, currency, created_at)
-                VALUES (:uid, '0.00', '0.00', '0.00', '0.00', '0.00', 'NPR', datetime('now'))
+                VALUES (:uid, '0.00', '0.00', '0.00', '0.00', '0.00', 'NPR', CURRENT_TIMESTAMP)
             ");
             $wStmt->execute([':uid' => $userId]);
 
@@ -99,7 +101,7 @@ class AuthService {
             // 5. Welcome Notification
             $notif = $this->db->prepare("
                 INSERT INTO notifications (user_id, title, message, type, is_read, created_at)
-                VALUES (:uid, 'Welcome to CapitalNest Nepal', 'Your investment account and secure wallet have been created successfully.', 'system', 0, datetime('now'))
+                VALUES (:uid, 'Welcome to CapitalNest Nepal', 'Your investment account and secure wallet have been created successfully.', 'system', 0, CURRENT_TIMESTAMP)
             ");
             $notif->execute([':uid' => $userId]);
 
@@ -170,7 +172,7 @@ class AuthService {
 
         // Update last login
         $ip = $this->resolveClientIp();
-        $upd = $this->db->prepare("UPDATE users SET last_login_at = datetime('now'), last_login_ip = :ip, last_seen_ip = :ip, device_fingerprint = COALESCE(device_fingerprint, :device_fingerprint) WHERE id = :id");
+        $upd = $this->db->prepare("UPDATE users SET last_login_at = CURRENT_TIMESTAMP, last_login_ip = :ip, last_seen_ip = :ip, device_fingerprint = COALESCE(device_fingerprint, :device_fingerprint) WHERE id = :id");
         $upd->execute([
             ':ip' => $ip,
             ':device_fingerprint' => $this->generateDeviceFingerprint(),
@@ -206,7 +208,7 @@ class AuthService {
             throw new Exception("This verification link has expired. Please register again to receive a new link.");
         }
 
-        $upd = $this->db->prepare("UPDATE users SET email_verified = 1, email_verified_at = datetime('now'), email_verification_token = NULL, email_verification_expires_at = NULL WHERE id = :id");
+        $upd = $this->db->prepare("UPDATE users SET email_verified = 1, email_verified_at = CURRENT_TIMESTAMP, email_verification_token = NULL, email_verification_expires_at = NULL WHERE id = :id");
         $upd->execute([':id' => $user['id']]);
 
         return [
@@ -337,7 +339,7 @@ class AuthService {
             throw new Exception("Current admin password is incorrect.");
         }
 
-        $this->db->prepare("UPDATE admin_users SET password_hash = :hash, updated_at = datetime('now') WHERE id = :id")
+        $this->db->prepare("UPDATE admin_users SET password_hash = :hash, updated_at = CURRENT_TIMESTAMP WHERE id = :id")
             ->execute([':hash' => Security::hashPassword($newPassword), ':id' => $adminId]);
 
         return ['success' => true, 'message' => 'Admin password updated successfully.'];
@@ -554,7 +556,7 @@ class AuthService {
         $_SESSION['admin_logged_in_at'] = time();
 
         // Update login
-        $upd = $this->db->prepare("UPDATE admin_users SET last_login_at = datetime('now'), last_login_ip = :ip WHERE id = :id");
+        $upd = $this->db->prepare("UPDATE admin_users SET last_login_at = CURRENT_TIMESTAMP, last_login_ip = :ip WHERE id = :id");
         $upd->execute([
             ':ip' => $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1',
             ':id' => $admin['id']

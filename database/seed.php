@@ -16,6 +16,25 @@ function runMigrationAndSeed(): void {
 
     echo "Running database setup for driver: {$driver}...\n";
 
+    if ($driver === 'mysql') {
+        $usersTableExists = $db->query("SHOW TABLES LIKE 'users'")->fetchColumn();
+        if (!$usersTableExists) {
+            $schemaFile = __DIR__ . '/schema.sql';
+            if (file_exists($schemaFile)) {
+                $sql = file_get_contents($schemaFile);
+                $statements = preg_split('/;\s*(?:\r?\n|$)/', $sql);
+                foreach ($statements as $statement) {
+                    $statement = trim((string)$statement);
+                    if ($statement === '') {
+                        continue;
+                    }
+                    $db->exec($statement . ';');
+                }
+                echo "Created MySQL schema from schema.sql.\n";
+            }
+        }
+    }
+
     if ($driver === 'sqlite') {
         // SQLite Schema Creation
         $tables = [

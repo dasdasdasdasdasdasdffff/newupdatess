@@ -52,6 +52,7 @@ class Database {
             if ($connectionType === 'mysql') {
                 $dsn = "mysql:host={$host};port={$port};dbname={$database};charset=utf8mb4";
                 self::$instance = new PDO($dsn, $username, $password, $options);
+                self::ensureDatabaseReady(self::$instance);
             } else {
                 // Portable SQLite fallback for local verification
                 $sqlitePath = dirname(__DIR__) . '/storage/database.sqlite';
@@ -82,6 +83,25 @@ class Database {
         }
 
         return self::$instance;
+    }
+
+    private static function ensureDatabaseReady(PDO $pdo): void {
+        $driver = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
+
+        if ($driver === 'mysql') {
+            $hasUsersTable = $pdo->query("SELECT 1 FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'users' LIMIT 1")->fetchColumn();
+            if ($hasUsersTable) {
+                return;
+            }
+
+            $seedFile = dirname(__DIR__) . '/database/seed.php';
+            if (file_exists($seedFile)) {
+                require_once $seedFile;
+            }
+            return;
+        }
+
+        self::bootstrapSqlite($pdo);
     }
 
     private static function bootstrapSqlite(PDO $pdo): void {

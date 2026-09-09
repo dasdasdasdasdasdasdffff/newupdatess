@@ -38,7 +38,7 @@ class DepositService {
         $stmt = $this->db->prepare("
             INSERT INTO deposits 
             (deposit_ref, user_id, amount, fee, net_amount, transaction_id, payment_method, reference_number, proof_document_path, status, created_at)
-            VALUES (:ref, :user_id, :amount, '0.00', :net_amount, :transaction_id, :method, :reference_num, :proof, 'pending', datetime('now'))
+            VALUES (:ref, :user_id, :amount, '0.00', :net_amount, :transaction_id, :method, :reference_num, :proof, 'pending', CURRENT_TIMESTAMP)
         ");
         $stmt->execute([
             ':ref' => $depositRef,
@@ -107,7 +107,7 @@ class DepositService {
             // 2. Mark deposit approved
             $updateStmt = $this->db->prepare("
                 UPDATE deposits 
-                SET status = 'approved', reviewed_by = :admin_id, admin_notes = :notes, updated_at = datetime('now')
+                SET status = 'approved', reviewed_by = :admin_id, admin_notes = :notes, updated_at = CURRENT_TIMESTAMP
                 WHERE id = :id
             ");
             $updateStmt->execute([
@@ -176,7 +176,7 @@ class DepositService {
 
             $updateStmt = $this->db->prepare("
                 UPDATE deposits 
-                SET status = 'rejected', reviewed_by = :admin_id, admin_notes = :notes, updated_at = datetime('now')
+                SET status = 'rejected', reviewed_by = :admin_id, admin_notes = :notes, updated_at = CURRENT_TIMESTAMP
                 WHERE id = :id
             ");
             $updateStmt->execute([
@@ -223,7 +223,7 @@ class DepositService {
     private function createNotification(int $userId, string $title, string $message, string $type): void {
         $stmt = $this->db->prepare("
             INSERT INTO notifications (user_id, title, message, type, is_read, created_at)
-            VALUES (:user_id, :title, :message, :type, 0, datetime('now'))
+            VALUES (:user_id, :title, :message, :type, 0, CURRENT_TIMESTAMP)
         ");
         $stmt->execute([
             ':user_id' => $userId,
@@ -236,7 +236,7 @@ class DepositService {
     private function logAdminActivity(int $adminId, string $action, string $targetType, string $targetId, array $details): void {
         $stmt = $this->db->prepare("
             INSERT INTO admin_activity_logs (admin_id, action, target_type, target_id, details, ip_address, created_at)
-            VALUES (:admin_id, :action, :type, :id, :details, :ip, datetime('now'))
+            VALUES (:admin_id, :action, :type, :id, :details, :ip, CURRENT_TIMESTAMP)
         ");
         $stmt->execute([
             ':admin_id' => $adminId,

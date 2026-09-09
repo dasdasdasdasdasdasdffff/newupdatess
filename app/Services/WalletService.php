@@ -70,7 +70,7 @@ class WalletService {
             $txStmt = $this->db->prepare("
                 INSERT INTO wallet_transactions 
                 (transaction_ref, user_id, wallet_id, type, amount, fee, previous_balance, new_balance, reference, notes, status, created_at)
-                VALUES (:ref, :user_id, :wallet_id, :type, :amount, '0.00', :prev, :new, :reference, :notes, 'completed', datetime('now'))
+                VALUES (:ref, :user_id, :wallet_id, :type, :amount, '0.00', :prev, :new, :reference, :notes, 'completed', CURRENT_TIMESTAMP)
             ");
             $txStmt->execute([
                 ':ref' => $txRef,
@@ -156,7 +156,7 @@ class WalletService {
             $txStmt = $this->db->prepare("
                 INSERT INTO wallet_transactions 
                 (transaction_ref, user_id, wallet_id, type, amount, fee, previous_balance, new_balance, reference, notes, status, created_at)
-                VALUES (:ref, :user_id, :wallet_id, :type, :amount, :fee, :prev, :new, :reference, :notes, 'completed', datetime('now'))
+                VALUES (:ref, :user_id, :wallet_id, :type, :amount, :fee, :prev, :new, :reference, :notes, 'completed', CURRENT_TIMESTAMP)
             ");
             $txStmt->execute([
                 ':ref' => $txRef,

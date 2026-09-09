@@ -90,7 +90,7 @@ class InvestmentService {
         $stmt = $this->db->prepare("
             INSERT INTO investments 
             (investment_ref, user_id, plan_id, amount, return_rate, expected_return, accrued_profit, duration_days, total_paid_out, start_date, end_date, next_payout_date, status, created_at)
-            VALUES (:ref, :user_id, :plan_id, :amount, :rate, :expected, '0.00', :duration_days, '0.00', :start, :end, :payout, 'active', datetime('now'))
+            VALUES (:ref, :user_id, :plan_id, :amount, :rate, :expected, '0.00', :duration_days, '0.00', :start, :end, :payout, 'active', CURRENT_TIMESTAMP)
         ");
         $stmt->execute([
             ':ref' => $invRef,

@@ -142,7 +142,7 @@ return [
         $id = (int)($_POST['ticket_id'] ?? 0);
         $st = $_POST['status'] ?? 'open';
         $db = Database::getConnection();
-        $db->prepare("UPDATE support_tickets SET status = ?, updated_at = datetime('now') WHERE id = ?")->execute([$st, $id]);
+        $db->prepare("UPDATE support_tickets SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")->execute([$st, $id]);
         header("Location: /admin/support/view?id={$id}&success=" . urlencode('Status updated.'));
         exit;
     },

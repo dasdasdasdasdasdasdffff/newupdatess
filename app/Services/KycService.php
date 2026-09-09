@@ -72,7 +72,7 @@ class KycService {
                 :uid, :type, :id_num, :full_name, :father, :mother,
                 :dob, :gender, :p_addr, :c_addr,
                 :front, :back, :selfie,
-                'pending', datetime('now')
+                'pending', CURRENT_TIMESTAMP
             )
         ");
 
@@ -97,7 +97,7 @@ class KycService {
         // Notify user
         $notif = $this->db->prepare("
             INSERT INTO notifications (user_id, title, message, type, is_read, created_at)
-            VALUES (:uid, 'KYC Documents Submitted', 'Your identity documents have been submitted to compliance for AML/KYC clearance.', 'kyc', 0, datetime('now'))
+            VALUES (:uid, 'KYC Documents Submitted', 'Your identity documents have been submitted to compliance for AML/KYC clearance.', 'kyc', 0, CURRENT_TIMESTAMP)
         ");
         $notif->execute([':uid' => $userId]);
 
@@ -119,7 +119,7 @@ class KycService {
 
         $upd = $this->db->prepare("
             UPDATE kyc_requests 
-            SET status = 'verified', reviewed_by = :admin, reviewed_at = datetime('now')
+            SET status = 'verified', reviewed_by = :admin, reviewed_at = CURRENT_TIMESTAMP
             WHERE id = :id
         ");
         $upd->execute([':admin' => $adminId, ':id' => $kycId]);
@@ -127,7 +127,7 @@ class KycService {
         $userId = (int)$kyc['user_id'];
         $notif = $this->db->prepare("
             INSERT INTO notifications (user_id, title, message, type, is_read, created_at)
-            VALUES (:uid, 'Identity Verification Approved', 'Your KYC profile has been verified successfully. Full transaction privileges unlocked.', 'kyc', 0, datetime('now'))
+            VALUES (:uid, 'Identity Verification Approved', 'Your KYC profile has been verified successfully. Full transaction privileges unlocked.', 'kyc', 0, CURRENT_TIMESTAMP)
         ");
         $notif->execute([':uid' => $userId]);
 
@@ -151,7 +151,7 @@ class KycService {
 
         $upd = $this->db->prepare("
             UPDATE kyc_requests 
-            SET status = 'rejected', rejection_reason = :reason, reviewed_by = :admin, reviewed_at = datetime('now')
+            SET status = 'rejected', rejection_reason = :reason, reviewed_by = :admin, reviewed_at = CURRENT_TIMESTAMP
             WHERE id = :id
         ");
         $upd->execute([
@@ -163,7 +163,7 @@ class KycService {
         $userId = (int)$kyc['user_id'];
         $notif = $this->db->prepare("
             INSERT INTO notifications (user_id, title, message, type, is_read, created_at)
-            VALUES (:uid, 'KYC Verification Incomplete', :msg, 'kyc', 0, datetime('now'))
+            VALUES (:uid, 'KYC Verification Incomplete', :msg, 'kyc', 0, CURRENT_TIMESTAMP)
         ");
         $notif->execute([
             ':uid' => $userId,
@@ -219,7 +219,7 @@ class KycService {
     private function logAdminActivity(int $adminId, string $action, string $targetType, string $targetId, array $details): void {
         $stmt = $this->db->prepare("
             INSERT INTO admin_activity_logs (admin_id, action, target_type, target_id, details, ip_address, created_at)
-            VALUES (:admin_id, :action, :type, :id, :details, :ip, datetime('now'))
+            VALUES (:admin_id, :action, :type, :id, :details, :ip, CURRENT_TIMESTAMP)
         ");
         $stmt->execute([
             ':admin_id' => $adminId,

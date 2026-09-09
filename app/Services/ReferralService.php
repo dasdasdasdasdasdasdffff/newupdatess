@@ -58,7 +58,7 @@ class ReferralService {
 
         $ins = $this->db->prepare("
             INSERT INTO referrals (referrer_id, referred_user_id, referral_code, status, reward_amount, rewarded_at, created_at)
-            VALUES (:referrer, :referred, :code, 'rewarded', :reward, datetime('now'), datetime('now'))
+            VALUES (:referrer, :referred, :code, 'rewarded', :reward, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         ");
         $ins->execute([
             ':referrer' => $referrerId,
@@ -80,7 +80,7 @@ class ReferralService {
 
         $notification = $this->db->prepare("
             INSERT INTO notifications (user_id, title, message, type, is_read, created_at)
-            VALUES (:uid, :title, :message, 'referral', 0, datetime('now'))
+            VALUES (:uid, :title, :message, 'referral', 0, CURRENT_TIMESTAMP)
         ");
         $notification->execute([
             ':uid' => $referrerId,
@@ -181,7 +181,7 @@ class ReferralService {
         // Update referral record
         $upd = $this->db->prepare("
             UPDATE referrals 
-            SET status = 'rewarded', reward_amount = :amt, rewarded_at = datetime('now')
+            SET status = 'rewarded', reward_amount = :amt, rewarded_at = CURRENT_TIMESTAMP
             WHERE id = :id
         ");
         $upd->execute([':amt' => number_format($rewardAmount, 2, '.', ''), ':id' => $refId]);
@@ -189,7 +189,7 @@ class ReferralService {
         // Insert referral earnings breakdown
         $earnStmt = $this->db->prepare("
             INSERT INTO referral_earnings (referral_id, user_id, from_user_id, investment_id, amount, commission_rate, status, created_at)
-            VALUES (:ref_id, :uid, :from_uid, :inv_id, :amt, :rate, 'paid', datetime('now'))
+            VALUES (:ref_id, :uid, :from_uid, :inv_id, :amt, :rate, 'paid', CURRENT_TIMESTAMP)
         ");
         $earnStmt->execute([
             ':ref_id' => $refId,
@@ -203,7 +203,7 @@ class ReferralService {
         // Notify referrer
         $notif = $this->db->prepare("
             INSERT INTO notifications (user_id, title, message, type, is_read, created_at)
-            VALUES (:uid, 'Referral Commission Credited', :msg, 'referral', 0, datetime('now'))
+            VALUES (:uid, 'Referral Commission Credited', :msg, 'referral', 0, CURRENT_TIMESTAMP)
         ");
         $notif->execute([
             ':uid' => $referrerId,

@@ -56,10 +56,11 @@ class WithdrawalService {
         $notes = "Withdrawal request to {$method} ({$accountName}, {$accountNumber})";
         $this->walletService->debitAvailable($userId, $amount, 'withdrawal', $withRef, $notes, 0.00);
 
-        // Record withdrawal. Local SQLite can carry either the legacy schema
-        // (payout_method/account_details) or the newer schema (method/account_name/account_number).
-        $legacyColumns = $this->db->query("PRAGMA table_info(withdrawals)")->fetchAll(PDO::FETCH_ASSOC);
-        $columnNames = array_map(static fn(array $column): string => $column['name'], $legacyColumns);
+        // Record withdrawal. MySQL and SQLite differ in column introspection syntax, so use the correct query for each driver.
+        $legacyColumns = $this->db->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite'
+            ? $this->db->query("PRAGMA table_info(withdrawals)")->fetchAll(PDO::FETCH_ASSOC)
+            : $this->db->query("SHOW COLUMNS FROM withdrawals")->fetchAll(PDO::FETCH_ASSOC);
+        $columnNames = array_map(static fn(array $column): string => $column['Field'] ?? $column['name'], $legacyColumns);
 
         $insertFields = ['withdrawal_ref', 'user_id', 'amount', 'fee'];
         $params = [
@@ -125,7 +126,7 @@ class WithdrawalService {
         $placeholders[] = ':status';
 
         $insertFields[] = 'created_at';
-        $placeholders[] = "datetime('now')";
+        $placeholders[] = 'CURRENT_TIMESTAMP';
 
         $stmt = $this->db->prepare(sprintf(
             "INSERT INTO withdrawals (%s) VALUES (%s)",
@@ -180,7 +181,7 @@ class WithdrawalService {
 
             $update = $this->db->prepare("
                 UPDATE withdrawals 
-                SET status = 'completed', processed_by = :admin_id, admin_notes = :notes, updated_at = datetime('now')
+                SET status = 'completed', processed_by = :admin_id, admin_notes = :notes, updated_at = CURRENT_TIMESTAMP
                 WHERE id = :id
             ");
             $update->execute([
@@ -256,7 +257,7 @@ class WithdrawalService {
             // Update status
             $update = $this->db->prepare("
                 UPDATE withdrawals 
-                SET status = 'rejected', processed_by = :admin_id, admin_notes = :notes, updated_at = datetime('now')
+                SET status = 'rejected', processed_by = :admin_id, admin_notes = :notes, updated_at = CURRENT_TIMESTAMP
                 WHERE id = :id
             ");
             $update->execute([
@@ -300,7 +301,7 @@ class WithdrawalService {
     private function createNotification(int $userId, string $title, string $message, string $type): void {
         $stmt = $this->db->prepare("
             INSERT INTO notifications (user_id, title, message, type, is_read, created_at)
-            VALUES (:user_id, :title, :message, :type, 0, datetime('now'))
+            VALUES (:user_id, :title, :message, :type, 0, CURRENT_TIMESTAMP)
         ");
         $stmt->execute([
             ':user_id' => $userId,
@@ -313,7 +314,7 @@ class WithdrawalService {
     private function logAdminActivity(int $adminId, string $action, string $targetType, string $targetId, array $details): void {
         $stmt = $this->db->prepare("
             INSERT INTO admin_activity_logs (admin_id, action, target_type, target_id, details, ip_address, created_at)
-            VALUES (:admin_id, :action, :type, :id, :details, :ip, datetime('now'))
+            VALUES (:admin_id, :action, :type, :id, :details, :ip, CURRENT_TIMESTAMP)
         ");
         $stmt->execute([
             ':admin_id' => $adminId,
