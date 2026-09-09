@@ -150,7 +150,14 @@ class Database {
                 if (in_array($column, $existingColumns, true)) {
                     continue;
                 }
-                $pdo->exec("ALTER TABLE `{$table}` ADD COLUMN `{$column}` {$definition}");
+                try {
+                    $pdo->exec("ALTER TABLE `{$table}` ADD COLUMN `{$column}` {$definition}");
+                } catch (PDOException $e) {
+                    // Another request may have completed the same startup migration.
+                    if ($e->getCode() !== '42S21' && !str_contains($e->getMessage(), 'Duplicate column name')) {
+                        throw $e;
+                    }
+                }
             }
         }
     }
