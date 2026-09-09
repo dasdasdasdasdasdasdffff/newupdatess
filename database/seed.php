@@ -269,13 +269,19 @@ function runMigrationAndSeed(): void {
     // --- SEED ADMIN USERS FROM ENV ---
     $adminName = getenv('ADMIN_NAME') ?: 'CapitalNest Compliance Officer';
     $adminEmail = getenv('ADMIN_EMAIL') ?: 'admin@capitalnest.np';
-    $adminPassword = getenv('ADMIN_PASSWORD') ?: 'Admin@CapitalNest2026!';
+    $adminPassword = getenv('ADMIN_PASSWORD');
+
+    if (empty($adminPassword)) {
+        echo "Admin password is not configured in environment variables. Skipping admin seed.\n";
+        return;
+    }
+
     $adminCheck = $db->query("SELECT COUNT(*) FROM admin_users WHERE email = " . $db->quote($adminEmail))->fetchColumn();
     if ((int)$adminCheck === 0) {
         $pwHash = password_hash($adminPassword, PASSWORD_BCRYPT);
         $stmt = $db->prepare("INSERT INTO admin_users (name, email, password_hash, role, status) VALUES (?, ?, ?, ?, 'active')");
         $stmt->execute([$adminName, $adminEmail, $pwHash, 'super_admin']);
-        echo "Created super admin: {$adminEmail}\n";
+        echo "Created super admin account.\n";
     }
 
     // --- LIVE STATE: no demo investor/wallet data seeded ---
