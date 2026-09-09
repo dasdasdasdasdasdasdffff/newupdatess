@@ -204,7 +204,7 @@ class AuthService {
         if (!Security::verifyPassword($password, (string)$user['password_hash'])) {
             throw new Exception("Invalid email or password. If you forgot it, use Forgot password.");
         }
-        if ($this->isIpBlocked($this->resolveClientIp())) {
+        if ($this->isIpBlockedForLogin($this->resolveClientIp())) {
             throw new Exception("This IP address is temporarily blocked. Please try again later.");
         }
 
@@ -249,7 +249,11 @@ class AuthService {
             $metadata['id'] = (int)$this->db->lastInsertId();
             $device = $metadata;
         }
-        if (!empty($device['blocked_until']) && strtotime((string)$device['blocked_until']) > time()) {
+        if (
+            !empty($device['blocked_until'])
+            && strtotime((string)$device['blocked_until']) > time()
+            && !$this->isAutomaticRegistrationDeviceBlock((string)($device['blocked_reason'] ?? ''))
+        ) {
             throw new Exception("This device has been blocked. Please contact support.");
         }
 
@@ -695,6 +699,26 @@ class AuthService {
         ");
         $stmt->execute([':ip' => $ip]);
         return (bool)$stmt->fetchColumn();
+    }
+
+    private function isIpBlockedForLogin(string $ip): bool {
+        $stmt = $this->db->prepare("
+            SELECT id
+            FROM security_ip_blocks
+            WHERE ip_address = :ip
+              AND blocked_until > CURRENT_TIMESTAMP
+              AND (reason IS NULL OR reason <> :registration_reason)
+            LIMIT 1
+        ");
+        $stmt->execute([
+            ':ip' => $ip,
+            ':registration_reason' => 'Automatic 30-day registration abuse block',
+        ]);
+        return (bool)$stmt->fetchColumn();
+    }
+
+    private function isAutomaticRegistrationDeviceBlock(string $reason): bool {
+        return $reason === 'Automatic 30-day registration abuse block';
     }
 
     private function blockRegistrationIp(string $ip): void {
