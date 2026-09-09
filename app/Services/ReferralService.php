@@ -148,8 +148,8 @@ class ReferralService {
         } else {
             $transaction = $this->db->prepare("
                 INSERT INTO wallet_transactions
-                (transaction_ref, user_id, type, amount, previous_balance, new_balance, reference, notes, status)
-                VALUES (:transaction_ref, :user_id, 'referral', :amount, :previous_balance, :new_balance, :reference, :notes, 'completed')
+                (transaction_ref, user_id, type, amount, fee, previous_balance, new_balance, reference, notes, status)
+                VALUES (:transaction_ref, :user_id, 'referral', :amount, '0.00', :previous_balance, :new_balance, :reference, :notes, 'completed')
             ");
             $transaction->execute([
                 ':transaction_ref' => $transactionRef,

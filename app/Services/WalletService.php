@@ -67,22 +67,28 @@ class WalletService {
             $newBalance = $prevBalance + $amount;
             $txRef = Security::generateRef('TXN-CR');
 
-            $txStmt = $this->db->prepare("
-                INSERT INTO wallet_transactions 
-                (transaction_ref, user_id, wallet_id, type, amount, fee, previous_balance, new_balance, reference, notes, status, created_at)
-                VALUES (:ref, :user_id, :wallet_id, :type, :amount, '0.00', :prev, :new, :reference, :notes, 'completed', CURRENT_TIMESTAMP)
-            ");
-            $txStmt->execute([
+            $txSql = $this->db->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite'
+                ? "INSERT INTO wallet_transactions
+                   (transaction_ref, user_id, wallet_id, type, amount, fee, previous_balance, new_balance, reference, notes, status, created_at)
+                   VALUES (:ref, :user_id, :wallet_id, :type, :amount, '0.00', :prev, :new, :reference, :notes, 'completed', CURRENT_TIMESTAMP)"
+                : "INSERT INTO wallet_transactions
+                   (transaction_ref, user_id, type, amount, fee, previous_balance, new_balance, reference, notes, status, created_at)
+                   VALUES (:ref, :user_id, :type, :amount, '0.00', :prev, :new, :reference, :notes, 'completed', CURRENT_TIMESTAMP)";
+            $txStmt = $this->db->prepare($txSql);
+            $txParams = [
                 ':ref' => $txRef,
                 ':user_id' => $userId,
-                ':wallet_id' => (int)$wallet['id'],
                 ':type' => $type,
                 ':amount' => number_format($amount, 2, '.', ''),
                 ':prev' => number_format($prevBalance, 2, '.', ''),
                 ':new' => number_format($newBalance, 2, '.', ''),
                 ':reference' => $reference,
                 ':notes' => $notes
-            ]);
+            ];
+            if ($this->db->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite') {
+                $txParams[':wallet_id'] = (int)$wallet['id'];
+            }
+            $txStmt->execute($txParams);
 
             $updateSql = "UPDATE wallets SET available_balance = :new_balance";
             if ($type === 'deposit') {
@@ -153,15 +159,17 @@ class WalletService {
             $newBalance = $prevBalance - $totalDeduction;
             $txRef = Security::generateRef('TXN-DR');
 
-            $txStmt = $this->db->prepare("
-                INSERT INTO wallet_transactions 
-                (transaction_ref, user_id, wallet_id, type, amount, fee, previous_balance, new_balance, reference, notes, status, created_at)
-                VALUES (:ref, :user_id, :wallet_id, :type, :amount, :fee, :prev, :new, :reference, :notes, 'completed', CURRENT_TIMESTAMP)
-            ");
-            $txStmt->execute([
+            $txSql = $this->db->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite'
+                ? "INSERT INTO wallet_transactions
+                   (transaction_ref, user_id, wallet_id, type, amount, fee, previous_balance, new_balance, reference, notes, status, created_at)
+                   VALUES (:ref, :user_id, :wallet_id, :type, :amount, :fee, :prev, :new, :reference, :notes, 'completed', CURRENT_TIMESTAMP)"
+                : "INSERT INTO wallet_transactions
+                   (transaction_ref, user_id, type, amount, fee, previous_balance, new_balance, reference, notes, status, created_at)
+                   VALUES (:ref, :user_id, :type, :amount, :fee, :prev, :new, :reference, :notes, 'completed', CURRENT_TIMESTAMP)";
+            $txStmt = $this->db->prepare($txSql);
+            $txParams = [
                 ':ref' => $txRef,
                 ':user_id' => $userId,
-                ':wallet_id' => (int)$wallet['id'],
                 ':type' => $type,
                 ':amount' => number_format($amount, 2, '.', ''),
                 ':fee' => number_format($fee, 2, '.', ''),
@@ -169,7 +177,11 @@ class WalletService {
                 ':new' => number_format($newBalance, 2, '.', ''),
                 ':reference' => $reference,
                 ':notes' => $notes
-            ]);
+            ];
+            if ($this->db->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite') {
+                $txParams[':wallet_id'] = (int)$wallet['id'];
+            }
+            $txStmt->execute($txParams);
 
             $updateSql = "UPDATE wallets SET available_balance = :new_balance";
             if ($type === 'investment') {
