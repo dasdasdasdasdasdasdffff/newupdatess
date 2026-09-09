@@ -447,15 +447,21 @@ class AuthService {
 
         $html = $this->buildHtmlEmailTemplate($toName, $subject, $emailTemplate['heading'] ?? 'Action required', $emailTemplate['subtitle'] ?? '', $emailTemplate['primaryText'] ?? $body, $fallbackLink ?? '', $emailTemplate['ctaText'] ?? 'Continue');
         $lastError = null;
-        for ($attempt = 1; $attempt <= 3; $attempt++) {
-            try {
-                $this->sendViaSmtp($smtpHost, $smtpUsername, $smtpPassword, $smtpPort, $smtpSecure, $toEmail, $toName, $subject, $body, $html);
-                error_log('Verification email accepted by SMTP for recipient domain: ' . (str_contains($toEmail, '@') ? substr(strrchr($toEmail, '@'), 1) : 'unknown'));
-                return;
-            } catch (Exception $e) {
-                $lastError = $e;
-                if ($attempt < 3) {
-                    usleep(500000);
+        $endpoints = [[$smtpPort, $smtpSecure]];
+        if ($smtpPort === 587 && $smtpSecure === 'tls') {
+            $endpoints[] = [465, 'ssl'];
+        }
+        foreach ($endpoints as [$endpointPort, $endpointSecure]) {
+            for ($attempt = 1; $attempt <= 3; $attempt++) {
+                try {
+                    $this->sendViaSmtp($smtpHost, $smtpUsername, $smtpPassword, $endpointPort, $endpointSecure, $toEmail, $toName, $subject, $body, $html);
+                    error_log('Verification email accepted by SMTP for recipient domain: ' . (str_contains($toEmail, '@') ? substr(strrchr($toEmail, '@'), 1) : 'unknown'));
+                    return;
+                } catch (Exception $e) {
+                    $lastError = $e;
+                    if ($attempt < 3) {
+                        usleep(500000);
+                    }
                 }
             }
         }
@@ -499,7 +505,11 @@ class AuthService {
     }
 
     private function sendViaSmtp(string $host, string $username, string $password, int $port, string $secure, string $toEmail, string $toName, string $subject, string $body, ?string $htmlBody = null): void {
-        $smtp = fsockopen($host, $port, $errno, $errstr, 20);
+        // Railway containers may resolve Gmail to IPv6 while lacking IPv6 egress.
+        $ipv4Addresses = gethostbynamel($host);
+        $connectHost = $ipv4Addresses[0] ?? $host;
+        $socketHost = strtolower($secure) === 'ssl' ? 'ssl://' . $connectHost : $connectHost;
+        $smtp = fsockopen($socketHost, $port, $errno, $errstr, 20);
         if (!$smtp) {
             throw new Exception('SMTP connect failed: ' . $errstr . ' (' . $errno . ')');
         }
