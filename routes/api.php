@@ -10,6 +10,8 @@ use App\Services\WalletService;
 use App\Services\InvestmentService;
 use App\Services\DepositService;
 use App\Services\WithdrawalService;
+use App\Services\KycService;
+use App\Services\ReferralService;
 use App\Helpers\Security;
 use Config\Database;
 
@@ -149,8 +151,123 @@ if (str_starts_with($uri, '/api/')) {
         }
     }
 
+    if ($uri === '/api/auth/verify-email' && $method === 'POST') {
+        $input = $body();
+        if (empty($input['token'])) {
+            Security::jsonResponse(['error' => 'Verification token is required.'], 400);
+        }
+        try {
+            Security::jsonResponse([
+                'success' => true,
+                'data' => (new AuthService())->verifyEmail((string)$input['token'])
+            ]);
+        } catch (Throwable $error) {
+            $serviceError($error);
+        }
+    }
+
+    if ($uri === '/api/auth/resend-verification' && $method === 'POST') {
+        $input = $body();
+        if (empty($input['email'])) {
+            Security::jsonResponse(['error' => 'Email is required.'], 400);
+        }
+        try {
+            (new AuthService())->resendVerificationEmail((string)$input['email']);
+            Security::jsonResponse(['success' => true, 'message' => 'Verification email sent.']);
+        } catch (Throwable $error) {
+            $serviceError($error);
+        }
+    }
+
+    if ($uri === '/api/auth/forgot-password' && $method === 'POST') {
+        $input = $body();
+        if (empty($input['email'])) {
+            Security::jsonResponse(['error' => 'Email is required.'], 400);
+        }
+        try {
+            Security::jsonResponse([
+                'success' => true,
+                'data' => (new AuthService())->requestPasswordReset((string)$input['email'])
+            ]);
+        } catch (Throwable $error) {
+            $serviceError($error);
+        }
+    }
+
+    if ($uri === '/api/auth/reset-password' && $method === 'POST') {
+        $input = $body();
+        foreach (['token', 'password', 'password_confirmation'] as $field) {
+            if (empty($input[$field])) {
+                Security::jsonResponse(['error' => "{$field} is required."], 400);
+            }
+        }
+        try {
+            Security::jsonResponse([
+                'success' => true,
+                'data' => (new AuthService())->resetPassword(
+                    (string)$input['token'],
+                    (string)$input['password'],
+                    (string)$input['password_confirmation']
+                )
+            ]);
+        } catch (Throwable $error) {
+            $serviceError($error);
+        }
+    }
+
+    if ($uri === '/api/auth/change-password' && $method === 'POST') {
+        $user = $currentApiUser();
+        $input = $body();
+        foreach (['current_password', 'password', 'password_confirmation'] as $field) {
+            if (empty($input[$field])) {
+                Security::jsonResponse(['error' => "{$field} is required."], 400);
+            }
+        }
+        try {
+            Security::jsonResponse([
+                'success' => true,
+                'data' => (new AuthService())->changeUserPassword(
+                    (int)$user['id'],
+                    (string)$input['current_password'],
+                    (string)$input['password'],
+                    (string)$input['password_confirmation']
+                )
+            ]);
+        } catch (Throwable $error) {
+            $serviceError($error);
+        }
+    }
+
     if ($uri === '/api/auth/me' && $method === 'GET') {
         Security::jsonResponse(['success' => true, 'user' => $currentApiUser()]);
+    }
+
+    if ($uri === '/api/dashboard' && $method === 'GET') {
+        $user = $currentApiUser();
+        $db = Database::getConnection();
+        $wallet = (new WalletService($db))->getWallet((int)$user['id']);
+        $investments = (new InvestmentService($db))->getUserInvestments((int)$user['id'], 'active');
+        $notifications = $db->prepare(
+            "SELECT * FROM notifications WHERE user_id = :user_id ORDER BY id DESC LIMIT 10"
+        );
+        $notifications->execute([':user_id' => (int)$user['id']]);
+        Security::jsonResponse([
+            'success' => true,
+            'user' => $user,
+            'wallet' => $wallet,
+            'active_investments' => $investments,
+            'notifications' => $notifications->fetchAll()
+        ]);
+    }
+
+    if ($uri === '/api/notifications' && $method === 'GET') {
+        $user = $currentApiUser();
+        $db = Database::getConnection();
+        $stmt = $db->prepare(
+            "SELECT * FROM notifications WHERE user_id = :user_id ORDER BY id DESC LIMIT 100"
+        );
+        $stmt->execute([':user_id' => (int)$user['id']]);
+        Security::jsonResponse(['success' => true, 'notifications' => $stmt->fetchAll()]);
     }
 
     if ($uri === '/api/auth/logout' && $method === 'POST') {
@@ -197,6 +314,36 @@ if (str_starts_with($uri, '/api/')) {
             Security::jsonResponse([
                 'success' => true,
                 'investment' => (new InvestmentService())->invest((int)$user['id'], $planId, $amount)
+            ], 201);
+        } catch (Throwable $error) {
+            $serviceError($error);
+        }
+    }
+
+    if ($uri === '/api/referrals' && $method === 'GET') {
+        $user = $currentApiUser();
+        Security::jsonResponse([
+            'success' => true,
+            'referrals' => (new ReferralService())->getUserReferralSummary((int)$user['id'])
+        ]);
+    }
+
+    if ($uri === '/api/kyc' && $method === 'GET') {
+        $user = $currentApiUser();
+        Security::jsonResponse([
+            'success' => true,
+            'kyc' => (new KycService())->getUserKyc((int)$user['id'])
+        ]);
+    }
+
+    if ($uri === '/api/kyc' && $method === 'POST') {
+        $user = $currentApiUser();
+        $input = $_POST;
+        $files = $_FILES;
+        try {
+            Security::jsonResponse([
+                'success' => true,
+                'kyc' => (new KycService())->submitKyc((int)$user['id'], $input, $files)
             ], 201);
         } catch (Throwable $error) {
             $serviceError($error);
