@@ -82,9 +82,17 @@ spl_autoload_register(function ($class) {
 use App\Helpers\Security;
 use App\Middleware\CsrfMiddleware;
 use App\Services\AuthService;
+use App\Services\InvestmentService;
 
 // Initialize secure session
 Security::startSecureSession();
+
+// Keep matured investment payouts current even when no user is logged in.
+try {
+    (new InvestmentService())->settleMaturedInvestments();
+} catch (Throwable $e) {
+    error_log('Global investment settlement failed: ' . $e->getMessage());
+}
 
 $requestUri = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
 $requestMethod = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');

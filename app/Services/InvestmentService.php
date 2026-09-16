@@ -90,7 +90,7 @@ class InvestmentService {
                 $this->walletService->creditAvailable(
                     (int)$investment['user_id'],
                     $payout,
-                    'investment_return',
+                    'profit',
                     (string)$investment['investment_ref'],
                     'Investment matured and returned to main balance.'
                 );
