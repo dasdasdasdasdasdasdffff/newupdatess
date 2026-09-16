@@ -28,8 +28,17 @@ class AuthMiddleware {
             exit;
         }
 
-        // Settle matured investments before any authenticated page reads wallet data.
-        (new InvestmentService())->settleMaturedInvestments((int)$user['id']);
+        // A payout failure must not take down the authenticated portal. The
+        // investment remains eligible and will be retried on the next request.
+        try {
+            (new InvestmentService())->settleMaturedInvestments((int)$user['id']);
+        } catch (\Exception $error) {
+            error_log(sprintf(
+                'Investment settlement failed for user %d: %s',
+                (int)$user['id'],
+                $error->getMessage()
+            ));
+        }
 
         return $user;
     }

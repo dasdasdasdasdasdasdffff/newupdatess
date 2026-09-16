@@ -96,7 +96,15 @@ if (str_starts_with($uri, '/api/')) {
         if (!$user || $user['status'] !== 'active' || (int)$user['email_verified'] !== 1) {
             Security::jsonResponse(['error' => 'User account is unavailable.'], 401);
         }
-        (new InvestmentService())->settleMaturedInvestments((int)$user['id']);
+        try {
+            (new InvestmentService())->settleMaturedInvestments((int)$user['id']);
+        } catch (Throwable $error) {
+            error_log(sprintf(
+                'API investment settlement failed for user %d: %s',
+                (int)$user['id'],
+                $error->getMessage()
+            ));
+        }
         return $user;
     };
 
