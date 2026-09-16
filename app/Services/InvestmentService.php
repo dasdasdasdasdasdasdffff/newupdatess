@@ -98,14 +98,15 @@ class InvestmentService {
                 $walletStmt = $this->db->prepare(
                     "UPDATE wallets
                      SET invested_balance = CASE
-                         WHEN invested_balance >= :capital THEN invested_balance - :capital
+                         WHEN invested_balance >= :capital_check THEN invested_balance - :capital_subtract
                          ELSE 0
                      END,
                      total_earnings = total_earnings + :profit
                      WHERE user_id = :user_id"
                 );
                 $walletStmt->execute([
-                    ':capital' => number_format($capital, 2, '.', ''),
+                    ':capital_check' => number_format($capital, 2, '.', ''),
+                    ':capital_subtract' => number_format($capital, 2, '.', ''),
                     ':profit' => number_format($profit, 2, '.', ''),
                     ':user_id' => (int)$investment['user_id']
                 ]);
