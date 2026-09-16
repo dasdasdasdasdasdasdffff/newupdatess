@@ -58,7 +58,11 @@ class InvestmentService {
 
         try {
             $sql = "SELECT * FROM investments
-                    WHERE status = 'active' AND end_date <= CURRENT_TIMESTAMP";
+                    WHERE end_date <= CURRENT_TIMESTAMP
+                      AND (
+                          status = 'active'
+                          OR (status = 'completed' AND total_paid_out < expected_return)
+                      )";
             $params = [];
             if ($userId !== null) {
                 $sql .= " AND user_id = :user_id";
@@ -126,7 +130,11 @@ class InvestmentService {
                  accrued_profit = :profit,
                  total_paid_out = total_paid_out + :paid_out,
                  updated_at = CURRENT_TIMESTAMP
-             WHERE id = :id AND status = 'active'"
+             WHERE id = :id
+               AND (
+                   status = 'active'
+                   OR (status = 'completed' AND total_paid_out < expected_return)
+               )"
         );
         $stmt->execute([
             ':profit' => number_format($profit, 2, '.', ''),
