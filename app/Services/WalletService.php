@@ -93,7 +93,7 @@ class WalletService {
             $updateSql = "UPDATE wallets SET available_balance = :new_balance";
             if ($type === 'deposit') {
                 $updateSql .= ", total_deposits = total_deposits + :amt";
-            } elseif ($type === 'profit' || $type === 'referral') {
+            } elseif ($type === 'profit' || $type === 'referral' || $type === 'investment_return') {
                 $updateSql .= ", total_earnings = total_earnings + :amt";
             }
             $updateSql .= " WHERE user_id = :user_id";
@@ -103,7 +103,7 @@ class WalletService {
                 ':new_balance' => number_format($newBalance, 2, '.', ''),
                 ':user_id' => $userId
             ];
-            if ($type === 'deposit' || $type === 'profit' || $type === 'referral') {
+            if ($type === 'deposit' || $type === 'profit' || $type === 'referral' || $type === 'investment_return') {
                 $params[':amt'] = number_format($amount, 2, '.', '');
             }
             $updateStmt->execute($params);
