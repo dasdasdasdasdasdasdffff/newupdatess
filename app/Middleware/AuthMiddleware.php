@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace App\Middleware;
 
 use App\Services\AuthService;
+use App\Services\InvestmentService;
 use App\Helpers\Security;
 
 class AuthMiddleware {
@@ -26,6 +27,9 @@ class AuthMiddleware {
             header('Location: /login?error=' . urlencode('Your account has been suspended by compliance.'));
             exit;
         }
+
+        // Settle matured investments before any authenticated page reads wallet data.
+        (new InvestmentService())->settleMaturedInvestments((int)$user['id']);
 
         return $user;
     }
