@@ -50,6 +50,92 @@ class InvestmentService {
     }
 
     /**
+     * Return matured investments to the user's available balance once.
+     */
+    public function settleMaturedInvestments(?int $userId = null): int {
+        $driver = $this->db->getAttribute(PDO::ATTR_DRIVER_NAME);
+        $this->db->beginTransaction();
+
+        try {
+            $sql = "SELECT * FROM investments
+                    WHERE status = 'active' AND end_date <= CURRENT_TIMESTAMP";
+            $params = [];
+            if ($userId !== null) {
+                $sql .= " AND user_id = :user_id";
+                $params[':user_id'] = $userId;
+            }
+            $sql .= " ORDER BY id ASC";
+            if ($driver === 'mysql') {
+                $sql .= " FOR UPDATE";
+            }
+
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute($params);
+            $maturedInvestments = $stmt->fetchAll();
+
+            foreach ($maturedInvestments as $investment) {
+                $totalPaidOut = (float)($investment['total_paid_out'] ?? 0);
+                $payout = round((float)$investment['expected_return'] - $totalPaidOut, 2);
+                if ($payout <= 0) {
+                    $this->markInvestmentCompleted((int)$investment['id'], 0.0);
+                    continue;
+                }
+
+                $capital = (float)$investment['amount'];
+                $profit = max(0.0, round($payout - $capital, 2));
+                $this->walletService->creditAvailable(
+                    (int)$investment['user_id'],
+                    $payout,
+                    'investment_return',
+                    (string)$investment['investment_ref'],
+                    'Investment matured and returned to main balance.'
+                );
+
+                $walletStmt = $this->db->prepare(
+                    "UPDATE wallets
+                     SET invested_balance = CASE
+                         WHEN invested_balance >= :capital THEN invested_balance - :capital
+                         ELSE 0
+                     END,
+                     total_earnings = total_earnings + :profit
+                     WHERE user_id = :user_id"
+                );
+                $walletStmt->execute([
+                    ':capital' => number_format($capital, 2, '.', ''),
+                    ':profit' => number_format($profit, 2, '.', ''),
+                    ':user_id' => (int)$investment['user_id']
+                ]);
+
+                $this->markInvestmentCompleted((int)$investment['id'], $profit, $payout);
+            }
+
+            $this->db->commit();
+            return count($maturedInvestments);
+        } catch (Exception $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            throw $e;
+        }
+    }
+
+    private function markInvestmentCompleted(int $investmentId, float $profit, float $paidOut = 0.0): void {
+        $stmt = $this->db->prepare(
+            "UPDATE investments
+             SET status = 'completed',
+                 accrued_profit = :profit,
+                 total_paid_out = total_paid_out + :paid_out,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = :id AND status = 'active'"
+        );
+        $stmt->execute([
+            ':profit' => number_format($profit, 2, '.', ''),
+            ':paid_out' => number_format($paidOut, 2, '.', ''),
+            ':id' => $investmentId
+        ]);
+    }
+
+    /**
      * Create Investment subscription with atomic wallet balance debit
      */
     public function invest(int $userId, int $planId, float $amount): array {

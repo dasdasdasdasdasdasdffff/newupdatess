@@ -96,6 +96,7 @@ if (str_starts_with($uri, '/api/')) {
         if (!$user || $user['status'] !== 'active' || (int)$user['email_verified'] !== 1) {
             Security::jsonResponse(['error' => 'User account is unavailable.'], 401);
         }
+        (new InvestmentService())->settleMaturedInvestments((int)$user['id']);
         return $user;
     };
 
