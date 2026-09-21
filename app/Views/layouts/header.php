@@ -23,6 +23,14 @@ $activeRoute = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
         })(window,document,'script','dataLayer','GTM-5GTWZLG5');
     </script>
     <!-- End Google Tag Manager -->
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-V31C12PSFY"></script>
+    <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+        gtag('config', 'G-V31C12PSFY');
+    </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= htmlspecialchars($pageTitle ?? 'CapitalNest Nepal - Premier FinTech') ?></title>
