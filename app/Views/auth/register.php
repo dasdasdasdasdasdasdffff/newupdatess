@@ -118,7 +118,6 @@
                 Already have an account?
                 <a href="/login" class="font-semibold text-[#111827] hover:underline ml-1">Sign In</a>
             </div>
-            <?php $telegramInline = true; require dirname(__DIR__) . '/components/telegram_float.php'; ?>
         </div>
     </div>
 
