@@ -2,7 +2,7 @@
 $adCompact = $adCompact ?? false;
 $adPopup = $adPopup ?? false;
 ?>
-<a href="https://t.me/nestxbet" target="_blank" rel="noopener noreferrer"
+<a href="https://t.me/CapitalNestSupport" target="_blank" rel="noopener noreferrer"
     class="group block relative overflow-hidden rounded-2xl border-2 border-dashed border-[#C4BDF7] bg-gradient-to-r from-[#FAF9FF] to-[#F1EFFF] p-5 sm:p-6 transition hover:-translate-y-0.5 hover:border-[#7667EE] hover:shadow-lg hover:shadow-[#7667EE]/10 <?= $adCompact ? 'sm:p-4' : '' ?>">
     <div class="relative z-10 flex items-center gap-4">
         <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white text-[#7667EE] shadow-sm <?= $adCompact ? 'h-10 w-10 rounded-lg' : '' ?>">
@@ -11,7 +11,7 @@ $adPopup = $adPopup ?? false;
         <div class="min-w-0">
             <strong class="block font-bold tracking-tight text-[#37336B] <?= $adCompact ? 'text-sm' : 'text-lg' ?>">Place your ads here</strong>
             <span class="mt-0.5 block text-xs text-[#817FA0]"><?= $adCompact ? 'Reach our audience with your brand.' : 'Premium ad space available for your brand.' ?></span>
-            <span class="mt-2 flex items-center gap-1 text-[11px] font-bold text-[#7667EE]">Contact on Telegram <b class="text-[#4B3DC2]">@nestxbet</b> <i data-lucide="arrow-right" class="h-3.5 w-3.5"></i></span>
+            <span class="mt-2 flex items-center gap-1 text-[11px] font-bold text-[#7667EE]">Contact on Telegram <b class="text-[#4B3DC2]">@CapitalNestSupport</b> <i data-lucide="arrow-right" class="h-3.5 w-3.5"></i></span>
         </div>
         <span class="ml-auto hidden shrink-0 rounded-full bg-white px-2.5 py-1 text-[8px] font-bold tracking-widest text-[#7667EE] shadow-sm sm:block">AVAILABLE</span>
     </div>
@@ -29,7 +29,7 @@ $adPopup = $adPopup ?? false;
         <span class="text-[10px] font-bold tracking-[0.16em] text-[#7667EE]">PREMIUM AD SPACE</span>
         <h2 class="mt-2 text-2xl font-bold tracking-tight text-[#20213A]">Place your ads here</h2>
         <p class="mx-auto mt-2 max-w-xs text-sm leading-6 text-[#9091A3]">Reach thousands of active members with a premium ad placement on CapitalNest.</p>
-        <a href="https://t.me/nestxbet" target="_blank" rel="noopener noreferrer" class="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-[#7667EE] px-4 py-3 text-sm font-bold text-white shadow-lg shadow-[#7667EE]/25">Contact @nestxbet on Telegram <i data-lucide="arrow-right" class="h-4 w-4"></i></a>
+        <a href="https://t.me/CapitalNestSupport" target="_blank" rel="noopener noreferrer" class="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-[#7667EE] px-4 py-3 text-sm font-bold text-white shadow-lg shadow-[#7667EE]/25">Contact @CapitalNestSupport on Telegram <i data-lucide="arrow-right" class="h-4 w-4"></i></a>
     </div>
 </div>
 <?php endif; ?>

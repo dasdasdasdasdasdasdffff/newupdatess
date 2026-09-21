@@ -20,7 +20,7 @@ import {
   X,
 } from 'lucide-react';
 
-const telegramUrl = 'https://t.me/nestxbet';
+const telegramUrl = 'https://t.me/CapitalNestSupport';
 
 function AdLabel() {
   return <span className="ad-label">ADVERTISEMENT</span>;
@@ -33,7 +33,7 @@ function AdCreative({compact = false}: {compact?: boolean}) {
       <div className="ad-space-copy">
         <strong>Place your ads here</strong>
         <span>{compact ? 'Reach our audience with your brand.' : 'Premium ad space available for your brand.'}</span>
-        <b>Contact on Telegram <em>@nestxbet</em> <ArrowRight size={14} /></b>
+        <b>Contact on Telegram <em>@CapitalNestSupport</em> <ArrowRight size={14} /></b>
       </div>
       <div className="ad-space-badge">AVAILABLE</div>
     </a>
@@ -107,7 +107,7 @@ function Dashboard({onLogout}: {onLogout: () => void}) {
           <div className="bottom-ad"><AdLabel /><AdCreative compact /></div>
         </div>
       </main>
-      {showPopup && <div className="modal-backdrop" role="dialog" aria-modal="true"><div className="promo-modal"><button className="modal-close" onClick={() => setShowPopup(false)} aria-label="Close promotion"><X size={18} /></button><div className="modal-spark"><Gift size={26} /></div><span className="eyebrow">A QUICK HELLO</span><h2>Have a brand to share?</h2><p>Reach thousands of active members with a premium ad placement on CapitalNest.</p><a className="primary-button modal-button" href={telegramUrl} target="_blank" rel="noreferrer">Place your ad <ArrowRight size={17} /></a><small>Message us directly on Telegram <strong>@nestxbet</strong></small></div></div>}
+      {showPopup && <div className="modal-backdrop" role="dialog" aria-modal="true"><div className="promo-modal"><button className="modal-close" onClick={() => setShowPopup(false)} aria-label="Close promotion"><X size={18} /></button><div className="modal-spark"><Gift size={26} /></div><span className="eyebrow">A QUICK HELLO</span><h2>Have a brand to share?</h2><p>Reach thousands of active members with a premium ad placement on CapitalNest.</p><a className="primary-button modal-button" href={telegramUrl} target="_blank" rel="noreferrer">Place your ad <ArrowRight size={17} /></a><small>Message us directly on Telegram <strong>@CapitalNestSupport</strong></small></div></div>}
     </div>
   );
 }
