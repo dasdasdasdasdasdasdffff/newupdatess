@@ -23,6 +23,8 @@
         </div>
     </footer>
 
+    <?php require dirname(__DIR__) . '/components/telegram_float.php'; ?>
+
     <script>
         // Render Lucide icons dynamically
         lucide.createIcons();

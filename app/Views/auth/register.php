@@ -125,6 +125,8 @@
         <?php $adCompact = true; require dirname(__DIR__) . '/components/ad_space.php'; ?>
     </div>
 
+    <?php require dirname(__DIR__) . '/components/telegram_float.php'; ?>
+
     <script>
         lucide.createIcons();
     </script>
