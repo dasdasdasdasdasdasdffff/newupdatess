@@ -60,6 +60,30 @@ require dirname(__DIR__) . '/layouts/admin_header.php';
     </div>
 </div>
 
+<!-- Website Reach & Registration Telemetry -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+    <div class="p-5 bg-white border border-[#E5E7EB] rounded-2xl shadow-sm">
+        <span class="text-xs font-medium text-[#6B7280]">All Website Views</span>
+        <div class="mt-2 text-2xl font-bold text-[#111827]"><?= number_format($totalPageViews) ?></div>
+        <div class="mt-1 text-[11px] text-[#6B7280]">Tracked server-side page requests</div>
+    </div>
+    <div class="p-5 bg-white border border-[#E5E7EB] rounded-2xl shadow-sm">
+        <span class="text-xs font-medium text-[#6B7280]">Unique Visitors</span>
+        <div class="mt-2 text-2xl font-bold text-[#111827]"><?= number_format($uniqueVisitors) ?></div>
+        <div class="mt-1 text-[11px] text-[#6B7280]">Privacy-safe IP and browser grouping</div>
+    </div>
+    <div class="p-5 bg-white border border-[#E5E7EB] rounded-2xl shadow-sm">
+        <span class="text-xs font-medium text-[#6B7280]">Today's Views</span>
+        <div class="mt-2 text-2xl font-bold text-[#111827]"><?= number_format($todayPageViews) ?></div>
+        <div class="mt-1 text-[11px] text-[#6B7280]"><?= number_format($todayVisitors) ?> unique visitors today</div>
+    </div>
+    <div class="p-5 bg-white border border-[#E5E7EB] rounded-2xl shadow-sm">
+        <span class="text-xs font-medium text-[#6B7280]">Registered Users</span>
+        <div class="mt-2 text-2xl font-bold text-[#C59B27]"><?= number_format($totalRegisteredUsers) ?></div>
+        <div class="mt-1 text-[11px] text-[#6B7280]"><?= number_format($totalUsers) ?> email-verified accounts</div>
+    </div>
+</div>
+
 <!-- Operational Queues & User Totals -->
 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
     <div class="p-5 bg-white border border-[#E5E7EB] rounded-2xl shadow-sm">

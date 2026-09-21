@@ -105,6 +105,7 @@ class Database {
                 self::ensureMysqlColumns($pdo);
                 self::ensureMysqlDeviceFingerprintIndex($pdo);
                 self::ensureMysqlSecurityTables($pdo);
+                self::ensureMysqlVisitorTable($pdo);
                 self::backfillMysqlReferrals($pdo);
                 return;
             }
@@ -117,6 +118,7 @@ class Database {
             self::ensureMysqlColumns($pdo);
             self::ensureMysqlDeviceFingerprintIndex($pdo);
             self::ensureMysqlSecurityTables($pdo);
+            self::ensureMysqlVisitorTable($pdo);
             self::backfillMysqlReferrals($pdo);
             return;
         }
@@ -243,6 +245,7 @@ class Database {
         self::ensureSqliteColumns($pdo);
         self::ensureSqliteDeviceFingerprintIndex($pdo);
         self::ensureSqliteSecurityTables($pdo);
+        self::ensureSqliteVisitorTable($pdo);
     }
 
     private static function ensureSqliteDeviceFingerprintIndex(PDO $pdo): void {
@@ -304,6 +307,20 @@ class Database {
             WHERE device_fingerprint IS NOT NULL AND TRIM(device_fingerprint) <> ''");
     }
 
+    private static function ensureMysqlVisitorTable(PDO $pdo): void {
+        $pdo->exec("CREATE TABLE IF NOT EXISTS website_visits (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            path VARCHAR(255) NOT NULL,
+            method VARCHAR(10) NOT NULL,
+            visitor_hash CHAR(64) NOT NULL,
+            user_id BIGINT UNSIGNED NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_website_visits_created_at (created_at),
+            INDEX idx_website_visits_visitor_hash (visitor_hash),
+            INDEX idx_website_visits_user_id (user_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    }
+
     private static function ensureSqliteSecurityTables(PDO $pdo): void {
         $pdo->exec("CREATE TABLE IF NOT EXISTS user_devices (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -338,6 +355,20 @@ class Database {
             SELECT id, device_fingerprint, registration_ip, created_at, COALESCE(last_login_at, created_at)
             FROM users
             WHERE device_fingerprint IS NOT NULL AND TRIM(device_fingerprint) <> ''");
+    }
+
+    private static function ensureSqliteVisitorTable(PDO $pdo): void {
+        $pdo->exec("CREATE TABLE IF NOT EXISTS website_visits (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            path TEXT NOT NULL,
+            method TEXT NOT NULL,
+            visitor_hash TEXT NOT NULL,
+            user_id INTEGER NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )");
+        $pdo->exec("CREATE INDEX IF NOT EXISTS idx_website_visits_created_at ON website_visits (created_at)");
+        $pdo->exec("CREATE INDEX IF NOT EXISTS idx_website_visits_visitor_hash ON website_visits (visitor_hash)");
+        $pdo->exec("CREATE INDEX IF NOT EXISTS idx_website_visits_user_id ON website_visits (user_id)");
     }
 
     private static function getSqlitePath(): string {

@@ -24,6 +24,7 @@ DROP TABLE IF EXISTS `investment_plans`;
 DROP TABLE IF EXISTS `sessions`;
 DROP TABLE IF EXISTS `security_ip_blocks`;
 DROP TABLE IF EXISTS `registration_attempts`;
+DROP TABLE IF EXISTS `website_visits`;
 DROP TABLE IF EXISTS `user_devices`;
 DROP TABLE IF EXISTS `user_profiles`;
 DROP TABLE IF EXISTS `admin_users`;
@@ -108,6 +109,19 @@ CREATE TABLE `security_ip_blocks` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_security_ip_blocks_ip` (`ip_address`),
   INDEX `idx_security_ip_blocks_until` (`blocked_until`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `website_visits` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `path` VARCHAR(255) NOT NULL,
+  `method` VARCHAR(10) NOT NULL,
+  `visitor_hash` CHAR(64) NOT NULL,
+  `user_id` BIGINT UNSIGNED NULL,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  INDEX `idx_website_visits_created_at` (`created_at`),
+  INDEX `idx_website_visits_visitor_hash` (`visitor_hash`),
+  INDEX `idx_website_visits_user_id` (`user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 2. USER PROFILES TABLE
