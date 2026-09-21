@@ -83,40 +83,41 @@ use App\Helpers\Security;
 use App\Middleware\CsrfMiddleware;
 use App\Services\AuthService;
 use App\Services\InvestmentService;
-use Config\Database;
 
 // Initialize secure session
 Security::startSecureSession();
 
+$requestUri = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
+$requestMethod = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
+
 // Keep matured investment payouts current even when no user is logged in.
-if (($requestMethod === 'GET' || $requestMethod === 'HEAD') && !str_starts_with($requestUri, '/api/')) {
 try {
     (new InvestmentService())->settleMaturedInvestments();
 } catch (Throwable $e) {
     error_log('Global investment settlement failed: ' . $e->getMessage());
 }
 
-$requestUri = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
-$requestMethod = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
-
-try {
-    $visitorSecret = (string)(getenv('APP_KEY') ?: getenv('APP_URL') ?: 'capitalnest-visitor');
-    $ipAddress = (string)($_SERVER['REMOTE_ADDR'] ?? 'unknown');
-    $userAgent = (string)($_SERVER['HTTP_USER_AGENT'] ?? 'unknown');
-    $visitorHash = hash('sha256', $visitorSecret . '|' . $ipAddress . '|' . $userAgent);
-    $visitStatement = Database::getConnection()->prepare(
-        'INSERT INTO website_visits (path, method, visitor_hash, user_id, created_at)
-         VALUES (:path, :method, :visitor_hash, :user_id, CURRENT_TIMESTAMP)'
-    );
-    $visitStatement->execute([
-        ':path' => substr($requestUri ?: '/', 0, 255),
-        ':method' => substr($requestMethod, 0, 10),
-        ':visitor_hash' => $visitorHash,
-        ':user_id' => !empty($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : null,
-    ]);
-} catch (\Throwable $e) {
-    error_log('Website visit tracking failed: ' . $e->getMessage());
-}
+if (($requestMethod === 'GET' || $requestMethod === 'HEAD') && !str_starts_with($requestUri, '/api/')) {
+    register_shutdown_function(static function () use ($requestUri, $requestMethod): void {
+        try {
+            $visitorSecret = (string)(getenv('APP_KEY') ?: getenv('APP_URL') ?: 'capitalnest-visitor');
+            $ipAddress = (string)($_SERVER['REMOTE_ADDR'] ?? 'unknown');
+            $userAgent = (string)($_SERVER['HTTP_USER_AGENT'] ?? 'unknown');
+            $visitorHash = hash('sha256', $visitorSecret . '|' . $ipAddress . '|' . $userAgent);
+            $visitStatement = \Config\Database::getConnection()->prepare(
+                'INSERT INTO website_visits (path, method, visitor_hash, user_id, created_at)
+                 VALUES (:path, :method, :visitor_hash, :user_id, CURRENT_TIMESTAMP)'
+            );
+            $visitStatement->execute([
+                ':path' => substr($requestUri ?: '/', 0, 255),
+                ':method' => substr($requestMethod, 0, 10),
+                ':visitor_hash' => $visitorHash,
+                ':user_id' => !empty($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : null,
+            ]);
+        } catch (\Throwable $e) {
+            error_log('Website visit tracking failed: ' . $e->getMessage());
+        }
+    });
 }
 
 // Route API requests if URI starts with /api/
