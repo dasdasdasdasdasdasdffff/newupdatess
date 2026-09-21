@@ -109,6 +109,10 @@
         </div>
     </div>
 
+    <div class="mx-auto mt-6 w-full max-w-md px-4">
+        <?php $adCompact = true; require dirname(__DIR__) . '/components/ad_space.php'; ?>
+    </div>
+
     <script>
         lucide.createIcons();
     </script>

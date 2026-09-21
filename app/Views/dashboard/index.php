@@ -32,6 +32,10 @@ require dirname(__DIR__) . '/layouts/header.php';
     </div>
 </div>
 
+<div class="mb-8">
+    <?php $adCompact = false; $adPopup = true; require dirname(__DIR__) . '/components/ad_space.php'; ?>
+</div>
+
 <!-- 4-Stat Core Balance Grid -->
 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
     <!-- Total Net Worth -->
