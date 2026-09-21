@@ -1,5 +1,6 @@
+<?php $telegramInline = $telegramInline ?? false; ?>
 <a href="https://t.me/Capital_Nest_Nepal" target="_blank" rel="noopener noreferrer"
-    class="fixed bottom-5 right-5 z-40 flex items-center gap-2 rounded-full bg-[#229ED9] px-3.5 py-2.5 text-white shadow-lg shadow-[#229ED9]/30 transition hover:-translate-y-0.5 hover:bg-[#168AC1] hover:shadow-xl sm:bottom-6 sm:right-6"
+    class="<?= $telegramInline ? 'mx-auto mt-5 w-fit' : 'fixed bottom-5 right-5 z-40 sm:bottom-6 sm:right-6' ?> flex items-center gap-2 rounded-full bg-[#229ED9] px-3.5 py-2.5 text-white shadow-lg shadow-[#229ED9]/30 transition hover:-translate-y-0.5 hover:bg-[#168AC1] hover:shadow-xl"
     aria-label="Join CapitalNest Nepal Telegram channel for updates">
     <span class="grid h-7 w-7 place-items-center rounded-full bg-white/20">
         <svg viewBox="0 0 24 24" class="h-4 w-4 fill-current" aria-hidden="true">

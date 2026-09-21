@@ -106,14 +106,13 @@
                 Don't have an account yet?
                 <a href="/register" class="font-semibold text-[#111827] hover:underline ml-1">Create an Account</a>
             </div>
+            <?php $telegramInline = true; require dirname(__DIR__) . '/components/telegram_float.php'; ?>
         </div>
     </div>
 
     <div class="mx-auto mt-6 w-full max-w-md px-4">
         <?php $adCompact = true; require dirname(__DIR__) . '/components/ad_space.php'; ?>
     </div>
-
-    <?php require dirname(__DIR__) . '/components/telegram_float.php'; ?>
 
     <script>
         lucide.createIcons();
