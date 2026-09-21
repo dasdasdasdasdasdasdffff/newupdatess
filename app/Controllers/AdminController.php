@@ -47,10 +47,18 @@ class AdminController {
         $totalRegisteredUsers = (int)$this->db->query("SELECT COUNT(*) FROM users")->fetchColumn();
         $totalUsers = (int)$this->db->query("SELECT COUNT(*) FROM users WHERE email_verified = 1")->fetchColumn();
         $activeUsers = (int)$this->db->query("SELECT COUNT(*) FROM users WHERE email_verified = 1 AND status = 'active'")->fetchColumn();
-        $totalPageViews = (int)$this->db->query("SELECT COUNT(*) FROM website_visits")->fetchColumn();
-        $uniqueVisitors = (int)$this->db->query("SELECT COUNT(DISTINCT visitor_hash) FROM website_visits")->fetchColumn();
-        $todayPageViews = (int)$this->db->query("SELECT COUNT(*) FROM website_visits WHERE DATE(created_at) = CURRENT_DATE")->fetchColumn();
-        $todayVisitors = (int)$this->db->query("SELECT COUNT(DISTINCT visitor_hash) FROM website_visits WHERE DATE(created_at) = CURRENT_DATE")->fetchColumn();
+        $totalPageViews = 0;
+        $uniqueVisitors = 0;
+        $todayPageViews = 0;
+        $todayVisitors = 0;
+        try {
+            $totalPageViews = (int)$this->db->query("SELECT COUNT(*) FROM website_visits")->fetchColumn();
+            $uniqueVisitors = (int)$this->db->query("SELECT COUNT(DISTINCT visitor_hash) FROM website_visits")->fetchColumn();
+            $todayPageViews = (int)$this->db->query("SELECT COUNT(*) FROM website_visits WHERE DATE(created_at) = CURRENT_DATE")->fetchColumn();
+            $todayVisitors = (int)$this->db->query("SELECT COUNT(DISTINCT visitor_hash) FROM website_visits WHERE DATE(created_at) = CURRENT_DATE")->fetchColumn();
+        } catch (\Throwable $e) {
+            error_log('Website visit metrics unavailable: ' . $e->getMessage());
+        }
 
         // 2. Pending operational queues
         $pendingKyc = (int)$this->db->query("SELECT COUNT(*) FROM kyc_requests WHERE status = 'pending'")->fetchColumn();

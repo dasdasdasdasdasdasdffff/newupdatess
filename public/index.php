@@ -114,7 +114,7 @@ try {
         ':visitor_hash' => $visitorHash,
         ':user_id' => !empty($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : null,
     ]);
-} catch (\PDOException $e) {
+} catch (\Throwable $e) {
     error_log('Website visit tracking failed: ' . $e->getMessage());
 }
 }
