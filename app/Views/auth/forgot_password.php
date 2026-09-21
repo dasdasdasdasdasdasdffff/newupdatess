@@ -11,12 +11,12 @@
     </script>
     <!-- End Google Tag Manager -->
     <!-- Google tag (gtag.js) -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-V31C12PSFY"></script>
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-8494LE6SFD"></script>
     <script>
         window.dataLayer = window.dataLayer || [];
         function gtag(){dataLayer.push(arguments);}
         gtag('js', new Date());
-        gtag('config', 'G-V31C12PSFY');
+        gtag('config', 'G-8494LE6SFD');
     </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -42,7 +42,7 @@
             </div>
 
             <h2 class="text-center text-2xl font-bold tracking-tight text-[#111827]">Reset your password</h2>
-            <p class="mt-2 text-center text-xs text-[#6B7280]">Enter your email and we’ll send a secure reset link.</p>
+            <p class="mt-2 text-center text-xs text-[#6B7280]">Enter your email and weâ€™ll send a secure reset link.</p>
 
             <?php if (!empty($_GET['error'] ?? null)): ?>
                 <div class="mt-5 p-3.5 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs flex items-center space-x-2">
