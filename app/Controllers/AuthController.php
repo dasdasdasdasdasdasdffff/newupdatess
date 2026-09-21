@@ -206,6 +206,10 @@ class AuthController {
             header('Location: /admin/dashboard');
             exit;
         }
+        // Login forms contain a session-bound CSRF token and must never be served from a CDN/browser cache.
+        header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+        header('Pragma: no-cache');
+        header('Expires: 0');
         $csrf = Security::generateCsrfToken();
         $error = $_GET['error'] ?? null;
         require dirname(__DIR__) . '/Views/admin/login.php';
