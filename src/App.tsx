@@ -28,19 +28,14 @@ function AdLabel() {
 
 function AdCreative({compact = false}: {compact?: boolean}) {
   return (
-    <a className={`ad-creative ${compact ? 'ad-creative-compact' : ''}`} href={telegramUrl} target="_blank" rel="noreferrer">
-      <div className="ad-glow ad-glow-one" />
-      <div className="ad-glow ad-glow-two" />
-      <div className="ad-creative-copy">
-        <div className="ad-kicker"><Sparkles size={14} /> PREMIUM PARTNER</div>
-        <h3>{compact ? 'Promote your brand here' : 'Put your brand in the spotlight'}</h3>
-        <p>{compact ? 'Reach active members today.' : 'Connect with our audience through a premium placement.'}</p>
-        <span className="ad-cta">Place your ad <ArrowRight size={15} /></span>
+    <a className={`ad-space ${compact ? 'ad-space-compact' : ''}`} href={telegramUrl} target="_blank" rel="noreferrer">
+      <div className="ad-space-icon"><Sparkles size={compact ? 18 : 24} /></div>
+      <div className="ad-space-copy">
+        <strong>Place your ads here</strong>
+        <span>{compact ? 'Reach our audience with your brand.' : 'Premium ad space available for your brand.'}</span>
+        <b>Contact on Telegram <em>@nestxbet</em> <ArrowRight size={14} /></b>
       </div>
-      <div className="ad-visual">
-        <div className="ad-orb"><Gift size={34} /></div>
-        <div className="ad-chart"><TrendingUp size={18} /><span>+128%</span></div>
-      </div>
+      <div className="ad-space-badge">AVAILABLE</div>
     </a>
   );
 }
